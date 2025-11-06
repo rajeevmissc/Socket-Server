@@ -390,18 +390,21 @@ process.on('SIGTERM', () => {
 });
 
 // ------------------ Local Development Server ------------------
-if (process.env.NODE_ENV !== 'production') {
-  const PORT = process.env.PORT || 5000;
-  
-  connectToDatabase().then(() => {
-    httpServer.listen(PORT, () => {
-      console.log(`ServiceConnect Server running on port ${PORT}`);
-      console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
-      console.log(`Socket.IO enabled on port ${PORT}`);
-    });
+// ------------------ Start Server (for Render + Local) ------------------
+const PORT = process.env.PORT || 5000;
+
+connectToDatabase().then(() => {
+  httpServer.listen(PORT, () => {
+    console.log(`🚀 ServiceConnect Server running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
+    console.log(`Socket.IO enabled on port ${PORT}`);
   });
-}
+}).catch((err) => {
+  console.error("❌ Failed to connect to MongoDB:", err);
+  process.exit(1);
+});
+
 
 // ------------------ Export for Vercel Serverless ------------------
 export default httpServer;
