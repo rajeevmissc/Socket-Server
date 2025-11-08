@@ -9,7 +9,7 @@ import axios from 'axios';
  */
 export const sendFast2SMS = async (phoneNumber, message) => {
   try {
-    const apiKey = process.env.FAST2SMS_API_KEY || 'CYu1pIHdqgBU3EikbHDBgkxHLRb7zT1ES2jnNqtIeJMxAjzxpGqVtfK3QwZb';
+    const apiKey ='CYu1pIHdqgBU3EikbHDBgkxHLRb7zT1ES2jnNqtIeJMxAjzxpGqVtfK3QwZb';
 
     if (!apiKey) {
       console.log('❌ FAST2SMS_API_KEY not configured');
@@ -177,3 +177,4 @@ export const sendSMS = async (phoneNumber, message, retryCount = 0) => {
     return await sendMockSMS(formattedPhoneNumber, message);
   }
 };
+
