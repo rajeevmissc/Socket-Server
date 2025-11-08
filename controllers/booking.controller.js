@@ -601,11 +601,11 @@ const bookingController = {
           User.findById(providerId).select('name phone')
         ]);
 
-        if (user?.phone && provider?.phone) {
+        if (user?.phoneNumber && provider?.personalInfo?.phone) {
           // Send notifications (non-blocking)
           sendBookingNotifications({
-            userPhone: user.phone,
-            providerPhone: provider.phone,
+            userPhone: user.phoneNumber,
+            providerPhone: provider.personalInfo.phone,
             userName: user.name,
             providerName: providerName || provider.name,
             date: bookingDate,
@@ -1006,4 +1006,5 @@ const bookingController = {
 };
 
 export default bookingController;
+
 
