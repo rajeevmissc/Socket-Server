@@ -600,7 +600,7 @@ const bookingController = {
           User.findById(userId).select('name phone'),
           User.findById(providerId).select('name phone')
         ]);
-
+        console.log(user, provider);
         if (user?.phoneNumber && provider?.personalInfo?.phone) {
           // Send notifications (non-blocking)
           sendBookingNotifications({
@@ -1006,5 +1006,6 @@ const bookingController = {
 };
 
 export default bookingController;
+
 
 
