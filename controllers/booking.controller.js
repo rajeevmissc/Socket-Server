@@ -37,6 +37,7 @@ const bookingController = {
 createBooking: async (req, res) => {
   try {
     const userId = req.user._id;
+    console.log('booking coming data',req.body);
     const { providerId, providerName, date, timeSlot, mode, duration, price, verificationData } = req.body;
 
     const bookingDate = new Date(date);
@@ -468,5 +469,6 @@ createBooking: async (req, res) => {
   }
 
 };
+
 
 export default bookingController;
