@@ -1,180 +1,185 @@
 // utils/smsUtils.js
-import axios from 'axios';
+import twilio from 'twilio';
+
+// Twilio Configuration
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || 'ACac7af367690b65c0';
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || 'f4e2e997b6e88cee9121ecb7';
+const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER || '+14155238886'; // Your Twilio number
+const TWILIO_WHATSAPP_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
+
+// Initialize Twilio client
+const twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
 
 /**
- * Send SMS using Fast2SMS
- * @param {string} phoneNumber - Recipient phone number
+ * Send SMS using Twilio
+ * @param {string} phoneNumber - Recipient phone number (with country code)
  * @param {string} message - SMS message
  * @returns {Promise<boolean>} Success status
  */
-export const sendFast2SMS = async (phoneNumber, message) => {
+export const sendTwilioSMS = async (phoneNumber, message) => {
   try {
-    const apiKey ='CYu1pIHdqgBU3EikbHDBgkxHLRb7zT1ES2jnNqtIeJMxAjzxpGqVtfK3QwZb';
-
-    if (!apiKey) {
-      console.log('❌ FAST2SMS_API_KEY not configured');
-      return false;
-    }
-
-    // Clean phone number (remove +91 if present, keep only digits)
-    const cleanedPhone = phoneNumber.replace(/^\+91/, '').replace(/\D/g, '');
-    if (cleanedPhone.length !== 10) {
-      console.log('❌ Invalid phone number format. Must be 10 digits.');
-      return false;
-    }
-
-    console.log('📤 Sending SMS via Fast2SMS...');
-    console.log(`   To: +91${cleanedPhone}`);
+    console.log('📤 Sending SMS via Twilio...');
+    console.log(`   To: ${phoneNumber}`);
     console.log(`   Message: ${message}`);
-    console.log(`   API Key: ${apiKey.substring(0, 10)}...`);
 
-    // Use URLSearchParams for form data
-    const formData = new URLSearchParams();
-    formData.append('sender_id', 'TXTIND'); // Add sender ID
-    formData.append('message', message);
-    formData.append('route', 'v3'); // Try v3 route instead of q
-    formData.append('numbers', cleanedPhone);
-    formData.append('language', 'english'); // Add language parameter
+    const response = await twilioClient.messages.create({
+      body: message,
+      from: TWILIO_PHONE_NUMBER,
+      to: phoneNumber
+    });
 
-    const response = await axios.post(
-      'https://www.fast2sms.com/dev/bulkV2',
-      formData,
-      {
-        headers: {
-          'Authorization': apiKey,
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        timeout: 15000,
-      }
-    );
-
-    console.log('📨 Fast2SMS Response:', JSON.stringify(response.data, null, 2));
-
-    // Check response based on Fast2SMS documentation
-    if (response.data && response.data.return === true) {
-      console.log('✅ Fast2SMS: SMS sent successfully!');
-      console.log(`   Request ID: ${response.data.request_id}`);
-      return true;
-    } else {
-      console.log('❌ Fast2SMS: Failed to send SMS');
-      console.log('   Error:', response.data.message || 'Unknown error');
-      return false;
-    }
-
+    console.log('✅ Twilio SMS sent successfully!');
+    console.log(`   Message SID: ${response.sid}`);
+    console.log(`   Status: ${response.status}`);
+    
+    return true;
   } catch (error) {
-    console.error('❌ Fast2SMS Error:', error.message);
-    if (error.response) {
-      console.error('💡 API Response Error:', JSON.stringify(error.response.data, null, 2));
-      console.error('💡 Status Code:', error.response.status);
-    } else if (error.request) {
-      console.error('💡 No response received:', error.request);
+    console.error('❌ Twilio SMS Error:', error.message);
+    if (error.code) {
+      console.error(`   Error Code: ${error.code}`);
+    }
+    if (error.moreInfo) {
+      console.error(`   More Info: ${error.moreInfo}`);
     }
     return false;
   }
 };
 
 /**
- * Alternative Fast2SMS implementation matching your curl command exactly
+ * Send WhatsApp message using Twilio
+ * @param {string} phoneNumber - Recipient phone number (with country code)
+ * @param {string} message - WhatsApp message
+ * @returns {Promise<boolean>} Success status
  */
-export const sendFast2SMSAlternative = async (phoneNumber, message) => {
+export const sendWhatsAppMessage = async (phoneNumber, message) => {
   try {
-    const apiKey = process.env.FAST2SMS_API_KEY || 'CYu1pIHdqgBU3EikbHDBgkxHLRb7zT1ES2jnNqtIeJMxAjzxpGqVtfK3QwZb';
+    // Format phone number for WhatsApp
+    const whatsappTo = phoneNumber.startsWith('whatsapp:') 
+      ? phoneNumber 
+      : `whatsapp:${phoneNumber}`;
 
-    // Clean phone number
-    const cleanedPhone = phoneNumber.replace(/^\+91/, '').replace(/\D/g, '');
-    if (cleanedPhone.length !== 10) {
-      console.log('❌ Invalid phone number format. Must be 10 digits.');
-      return false;
-    }
-
-    console.log('📤 Sending SMS via Fast2SMS (Alternative)...');
-    console.log(`   To: +91${cleanedPhone}`);
+    console.log('📱 Sending WhatsApp message via Twilio...');
+    console.log(`   To: ${whatsappTo}`);
     console.log(`   Message: ${message}`);
 
-    // Use exact parameters from your working curl command
-    const formData = new URLSearchParams();
-    formData.append('message', message);
-    formData.append('route', 'q'); // Use 'q' route as in your curl
-    formData.append('numbers', cleanedPhone);
+    const response = await twilioClient.messages.create({
+      body: message,
+      from: TWILIO_WHATSAPP_NUMBER,
+      to: whatsappTo
+    });
 
-    const response = await axios.post(
-      'https://www.fast2sms.com/dev/bulkV2',
-      formData,
-      {
-        headers: {
-          'authorization': apiKey, // lowercase as in curl
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        timeout: 15000,
-      }
-    );
-
-    console.log('📨 Fast2SMS Alternative Response:', JSON.stringify(response.data, null, 2));
-
-    if (response.data && response.data.return === true) {
-      console.log('✅ Fast2SMS: SMS sent successfully!');
-      return true;
-    } else {
-      console.log('❌ Fast2SMS: Failed to send SMS');
-      return false;
-    }
-
+    console.log('✅ Twilio WhatsApp message sent successfully!');
+    console.log(`   Message SID: ${response.sid}`);
+    console.log(`   Status: ${response.status}`);
+    
+    return true;
   } catch (error) {
-    console.error('❌ Fast2SMS Alternative Error:', error.message);
-    if (error.response) {
-      console.error('💡 API Response Error:', error.response.data);
+    console.error('❌ Twilio WhatsApp Error:', error.message);
+    if (error.code) {
+      console.error(`   Error Code: ${error.code}`);
+    }
+    if (error.moreInfo) {
+      console.error(`   More Info: ${error.moreInfo}`);
     }
     return false;
   }
 };
 
 /**
- * Mock SMS service for development/testing
+ * Send both SMS and WhatsApp message
+ * @param {string} phoneNumber - Recipient phone number
+ * @param {string} message - Message content
+ * @returns {Promise<Object>} Status of both sends
  */
-const sendMockSMS = async (phoneNumber, message) => {
-  console.log('\n📱 MOCK SMS SERVICE');
+export const sendBothSMSAndWhatsApp = async (phoneNumber, message) => {
+  console.log('\n🚀 Sending via both SMS and WhatsApp...');
+  
+  const results = await Promise.allSettled([
+    sendTwilioSMS(phoneNumber, message),
+    sendWhatsAppMessage(phoneNumber, message)
+  ]);
+
+  return {
+    sms: results[0].status === 'fulfilled' ? results[0].value : false,
+    whatsapp: results[1].status === 'fulfilled' ? results[1].value : false
+  };
+};
+
+/**
+ * Mock SMS/WhatsApp service for development/testing
+ */
+const sendMockMessage = async (phoneNumber, message, type = 'SMS') => {
+  console.log(`\n📱 MOCK ${type} SERVICE`);
   console.log(`To: ${phoneNumber}`);
   console.log(`Message: ${message}`);
-  console.log('✅ Delivered (Mock Mode)\n');
+  console.log(`✅ Delivered (Mock Mode)\n`);
   return true;
 };
 
 /**
  * Main SMS sending function with retry logic
+ * @param {string} phoneNumber - Recipient phone number
+ * @param {string} message - Message content
+ * @param {Object} options - Additional options
+ * @param {boolean} options.sendWhatsApp - Also send via WhatsApp
+ * @param {boolean} options.preferWhatsApp - Prefer WhatsApp over SMS
+ * @param {number} retryCount - Current retry attempt
+ * @returns {Promise<boolean>} Success status
  */
-export const sendSMS = async (phoneNumber, message, retryCount = 0) => {
+export const sendSMS = async (phoneNumber, message, options = {}, retryCount = 0) => {
   if (!phoneNumber || !message) {
-    console.error('❌ Phone number and message are required for SMS');
+    console.error('❌ Phone number and message are required');
     return false;
   }
 
+  // Format phone number (ensure it starts with +)
   const formattedPhoneNumber = phoneNumber.startsWith('+')
     ? phoneNumber
     : `+${phoneNumber}`;
 
-  console.log(`\n🚀 Attempting to send SMS to ${formattedPhoneNumber}`);
+  console.log(`\n🚀 Attempting to send message to ${formattedPhoneNumber}`);
   console.log(`   Message length: ${message.length} characters`);
 
   try {
-    // Try alternative method first (matches your curl command)
-    let success = await sendFast2SMSAlternative(formattedPhoneNumber, message);
-    
-    // If alternative fails, try main method
-    if (!success && retryCount === 0) {
-      console.log('⚠️  Alternative method failed, trying main method...');
-      success = await sendFast2SMS(formattedPhoneNumber, message);
+    const { sendWhatsApp = false, preferWhatsApp = false } = options;
+
+    // Send via both channels
+    if (sendWhatsApp) {
+      const results = await sendBothSMSAndWhatsApp(formattedPhoneNumber, message);
+      return results.sms || results.whatsapp; // Success if either works
     }
 
-    if (success) {
-      return true;
+    // Prefer WhatsApp
+    if (preferWhatsApp) {
+      const whatsappSuccess = await sendWhatsAppMessage(formattedPhoneNumber, message);
+      if (whatsappSuccess) return true;
+      
+      console.log('⚠️  WhatsApp failed, trying SMS...');
+      return await sendTwilioSMS(formattedPhoneNumber, message);
     }
 
-    console.log('⚠️  Both Fast2SMS methods failed, falling back to mock...');
-    return await sendMockSMS(formattedPhoneNumber, message);
+    // Default: SMS only
+    const smsSuccess = await sendTwilioSMS(formattedPhoneNumber, message);
+    if (smsSuccess) return true;
+
+    // Retry with WhatsApp if SMS fails
+    if (retryCount === 0) {
+      console.log('⚠️  SMS failed, trying WhatsApp...');
+      return await sendWhatsAppMessage(formattedPhoneNumber, message);
+    }
+
+    console.log('⚠️  All methods failed, falling back to mock...');
+    return await sendMockMessage(formattedPhoneNumber, message, 'SMS');
     
   } catch (err) {
-    console.error('❌ SMS sending failed:', err);
-    return await sendMockSMS(formattedPhoneNumber, message);
+    console.error('❌ Message sending failed:', err);
+    return await sendMockMessage(formattedPhoneNumber, message, 'SMS');
   }
 };
 
+/**
+ * Send WhatsApp only (convenience function)
+ */
+export const sendWhatsApp = async (phoneNumber, message) => {
+  return sendSMS(phoneNumber, message, { preferWhatsApp: true });
+};
