@@ -515,42 +515,6 @@ const bookingController = {
     next();
   },
 
-  // Create new booking
-  createBooking: async (req, res) => {
-    try {
-      const userId = req.user._id;
-      console.log('booking coming data', req.body);
-      const { providerId, providerName, date, timeSlot, mode, duration, price, verificationData } = req.body;
-
-      const bookingDate = new Date(date);
-      bookingDate.setHours(0, 0, 0, 0);
-
-      // Find or create slot
-      let slot = await Slot.findOne({ providerId, date: bookingDate, timeSlot });
-      if (!slot) {
-        slot = new Slot({ providerId, date: bookingDate, timeSlot, status: 'available' });
-      }
-
-      if (slot.status !== 'available') {
-        return res.status(400).json({
-          success: false,
-          message: 'Slot is not available'
-        });
-      }
-
-      // Check wallet balance (5x requirement)
-      const requiredBalance = price * 5;
-      const walletBalance = await walletService.getBalance(userId);
-      if (walletBalance < requiredBalance) {
-        return res.status(400).json({
-          success: false,
-          message: 'Insufficient wallet balance',
-          requiredBalance,
-          currentBalance: walletBalance
-        });
-      }
-
-      // Create booking
     // Create new booking
 createBooking: async (req, res) => {
   try {
@@ -1083,6 +1047,7 @@ createBooking: async (req, res) => {
 };
 
 export default bookingController;
+
 
 
 
