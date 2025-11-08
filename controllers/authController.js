@@ -1,31 +1,23 @@
-// controllers/authController.js - Authentication controller
+// controllers/authController.js - Authentication controller with Twilio
 import bcrypt from 'bcryptjs';
 import User from '../models/Users.js';
 import OTP from '../models/OTP.js';
 import Session from '../models/Session.js';
 import { generateOTP, generateToken } from '../utils/authUtils.js';
-import { sendSMS } from '../utils/smsUtils.js';
+import { sendSMS, sendWhatsApp } from '../utils/smsUtils.js';
 import { AppError } from '../utils/errorUtils.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import Provider from '../models/Provider.js';
+
 // @desc    Send OTP to phone number
 // @route   POST /api/auth/send-otp
 // @access  Public
 const sendOTPController = asyncHandler(async (req, res) => {
-  const { phoneNumber, countryCode } = req.body;
-
-  // Validate input
-  if (!phoneNumber || !countryCode) {
-    throw new AppError('Phone number and country code are required', 400);
-  }
+  const { phoneNumber, countryCode, sendViaWhatsApp = false } = req.body;
 
   // Clean and format phone number
   const cleanPhoneNumber = phoneNumber.replace(/\D/g, '');
   const fullPhoneNumber = `+${countryCode}${cleanPhoneNumber}`;
-
-  console.log('\n📞 OTP Request Received:');
-  console.log('   Raw input:', { phoneNumber, countryCode });
-  console.log('   Formatted:', fullPhoneNumber);
 
   // Define admin numbers (can move to env/config)
   const adminNumbers = ['+916306539816', '+916306539817'];
@@ -44,13 +36,11 @@ const sendOTPController = asyncHandler(async (req, res) => {
 
     if (providerExists) {
       role = 'provider';
-      console.log('   👨‍💼 Provider role assigned');
     }
 
     // 2️⃣ Check if number is in admin list
     if (adminNumbers.includes(fullPhoneNumber)) {
       role = 'admin';
-      console.log('   👑 Admin role assigned');
     }
 
     // 3️⃣ Create new user with role
@@ -62,9 +52,7 @@ const sendOTPController = asyncHandler(async (req, res) => {
     });
 
     await user.save();
-    console.log('   ✅ New user created with role:', role);
   } else {
-    console.log('   ✅ Existing user found, role:', user.role);
     // Optional enhancement: if user exists but is missing a higher role, update it
     const providerExists = await Provider.findOne({
       'personalInfo.phone': fullPhoneNumber
@@ -75,11 +63,9 @@ const sendOTPController = asyncHandler(async (req, res) => {
       user.role = 'provider';
       user.providerId = providerExists._id;
       await user.save();
-      console.log('   🔄 User role updated to provider');
     } else if (isAdmin && user.role !== 'admin') {
       user.role = 'admin';
       await user.save();
-      console.log('   🔄 User role updated to admin');
     }
   }
 
@@ -90,16 +76,11 @@ const sendOTPController = asyncHandler(async (req, res) => {
   });
 
   if (recentOTP) {
-    console.log('   ⚠️  OTP request too frequent');
     throw new AppError('Please wait before requesting another OTP', 429);
   }
 
   // Clean up old OTPs
-  await OTP.deleteMany({ 
-    phoneNumber: fullPhoneNumber,
-    expiresAt: { $lt: new Date() }
-  });
-  console.log('   🗑️  Cleaned up expired OTPs');
+  await OTP.deleteMany({ phoneNumber: fullPhoneNumber });
 
   // Generate and hash OTP
   const otpCode = generateOTP();
@@ -114,30 +95,30 @@ const sendOTPController = asyncHandler(async (req, res) => {
   });
 
   await otpDoc.save();
-  console.log('   💾 OTP saved to database');
 
-  // Send SMS with detailed debugging
-  const smsMessage = `Your ServiceConnect verification code is: ${otpCode}. Valid for 10 minutes.`;
-  
-  console.log('   📤 Attempting to send SMS...');
-  console.log('   📱 To:', fullPhoneNumber);
-  console.log('   📝 Message:', smsMessage);
-  
-  const smsSent = await sendSMS(fullPhoneNumber, smsMessage);
+  // Prepare message
+  const message = `Your ServiceConnect verification code is: ${otpCode}. Valid for 10 minutes.`;
 
-  if (!smsSent) {
-    console.log('   ❌ SMS sending failed - deleting OTP from database');
-    await OTP.deleteOne({ _id: otpDoc._id });
-    throw new AppError('Failed to send verification code. Please try again.', 500);
+  // Send via SMS or WhatsApp based on user preference
+  let messageSent;
+  if (sendViaWhatsApp) {
+    messageSent = await sendWhatsApp(fullPhoneNumber, message);
+  } else {
+    // Send via SMS with WhatsApp fallback
+    messageSent = await sendSMS(fullPhoneNumber, message);
   }
 
-  console.log('   ✅ SMS sent successfully!');
+  if (!messageSent) {
+    await OTP.deleteOne({ _id: otpDoc._id });
+    throw new AppError('Failed to send verification code', 500);
+  }
 
   res.status(200).json({
     success: true,
     message: 'Verification code sent successfully',
     data: {
       phoneNumber: fullPhoneNumber,
+      sentVia: sendViaWhatsApp ? 'whatsapp' : 'sms',
       expiresIn: 600, // 10 min
       canResendAfter: 60 // 1 min
     }
@@ -196,17 +177,17 @@ const verifyOTPController = asyncHandler(async (req, res) => {
   // Update login stats
   await user.incrementLoginStats(req.ip);
 
+  // Update provider status if applicable
   if (user.role === 'provider') {
-  await Provider.findOneAndUpdate(
-    { 'personalInfo.phone': user.phoneNumber },
-    {
-      'presence.isOnline': true,
-      'presence.availabilityStatus': 'online',
-      'businessInfo.lastActive': new Date()
-    }
-  );
-}
-
+    await Provider.findOneAndUpdate(
+      { 'personalInfo.phone': user.phoneNumber },
+      {
+        'presence.isOnline': true,
+        'presence.availabilityStatus': 'online',
+        'businessInfo.lastActive': new Date()
+      }
+    );
+  }
 
   // Generate JWT token
   const token = generateToken(user._id);
@@ -252,7 +233,7 @@ const verifyOTPController = asyncHandler(async (req, res) => {
 // @route   POST /api/auth/resend-otp
 // @access  Public
 const resendOTPController = asyncHandler(async (req, res) => {
-  const { phoneNumber } = req.body;
+  const { phoneNumber, sendViaWhatsApp = false } = req.body;
 
   if (!phoneNumber) {
     throw new AppError('Phone number is required', 400);
@@ -285,11 +266,18 @@ const resendOTPController = asyncHandler(async (req, res) => {
 
   await otpDoc.save();
 
-  // Send SMS
-  const smsMessage = `Your ServiceConnect verification code is: ${otpCode}. Valid for 10 minutes.`;
-  const smsSent = await sendSMS(phoneNumber, smsMessage);
+  // Prepare message
+  const message = `Your ServiceConnect verification code is: ${otpCode}. Valid for 10 minutes.`;
 
-  if (!smsSent) {
+  // Send via SMS or WhatsApp
+  let messageSent;
+  if (sendViaWhatsApp) {
+    messageSent = await sendWhatsApp(phoneNumber, message);
+  } else {
+    messageSent = await sendSMS(phoneNumber, message);
+  }
+
+  if (!messageSent) {
     await OTP.deleteOne({ _id: otpDoc._id });
     throw new AppError('Failed to send verification code', 500);
   }
@@ -299,6 +287,7 @@ const resendOTPController = asyncHandler(async (req, res) => {
     message: 'Verification code resent successfully',
     data: {
       phoneNumber,
+      sentVia: sendViaWhatsApp ? 'whatsapp' : 'sms',
       expiresIn: 600,
       canResendAfter: 60
     }
@@ -361,8 +350,6 @@ const logoutAllController = asyncHandler(async (req, res) => {
   });
 });
 
-
-
 export {
   sendOTPController,
   verifyOTPController,
@@ -370,4 +357,3 @@ export {
   logoutController,
   logoutAllController
 };
-
