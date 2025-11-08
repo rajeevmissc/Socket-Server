@@ -612,8 +612,8 @@ Hello! Your appointment has been booked successfully.
 🔖 Booking ID: ${bookingId}
 
 ⏰ *Important:*
-• Please arrive 10 minutes early
-• Bring any relevant documents
+• Provider arrive 10 minutes early
+• Show any relevant documents
 • Verification pending
 
 📞 Need to reschedule? Contact us or cancel through the app.
@@ -850,3 +850,4 @@ export default {
   sendTwilioSMS,
   sendWhatsAppMessage
 };
+
