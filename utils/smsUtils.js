@@ -3,7 +3,7 @@ import twilio from 'twilio';
 
 // Twilio Configuration
 const TWILIO_ACCOUNT_SID = 'ACac7af3676902b6ea018f090dfd6b65c0';
-const TWILIO_AUTH_TOKEN = 'f4e2e997b6e82afc75298cee9121ecb7;
+const TWILIO_AUTH_TOKEN = 'f4e2e997b6e82afc75298cee9121ecb7';
 const TWILIO_PHONE_NUMBER = '+14155238886'; // Your Twilio number
 const TWILIO_WHATSAPP_NUMBER = 'whatsapp:+14155238886';
 
@@ -183,4 +183,5 @@ export const sendSMS = async (phoneNumber, message, options = {}, retryCount = 0
 export const sendWhatsApp = async (phoneNumber, message) => {
   return sendSMS(phoneNumber, message, { preferWhatsApp: true });
 };
+
 
