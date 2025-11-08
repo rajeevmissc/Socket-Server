@@ -14,9 +14,18 @@ import Provider from '../models/Provider.js';
 const sendOTPController = asyncHandler(async (req, res) => {
   const { phoneNumber, countryCode } = req.body;
 
+  // Validate input
+  if (!phoneNumber || !countryCode) {
+    throw new AppError('Phone number and country code are required', 400);
+  }
+
   // Clean and format phone number
   const cleanPhoneNumber = phoneNumber.replace(/\D/g, '');
   const fullPhoneNumber = `+${countryCode}${cleanPhoneNumber}`;
+
+  console.log('\n📞 OTP Request Received:');
+  console.log('   Raw input:', { phoneNumber, countryCode });
+  console.log('   Formatted:', fullPhoneNumber);
 
   // Define admin numbers (can move to env/config)
   const adminNumbers = ['+916306539816', '+916306539817'];
@@ -24,7 +33,7 @@ const sendOTPController = asyncHandler(async (req, res) => {
   // Check if user already exists
   let user = await User.findOne({ phoneNumber: fullPhoneNumber });
 
-  // If user doesn’t exist → create and assign role dynamically
+  // If user doesn't exist → create and assign role dynamically
   if (!user) {
     let role = 'user'; // default role
 
@@ -35,11 +44,13 @@ const sendOTPController = asyncHandler(async (req, res) => {
 
     if (providerExists) {
       role = 'provider';
+      console.log('   👨‍💼 Provider role assigned');
     }
 
     // 2️⃣ Check if number is in admin list
     if (adminNumbers.includes(fullPhoneNumber)) {
       role = 'admin';
+      console.log('   👑 Admin role assigned');
     }
 
     // 3️⃣ Create new user with role
@@ -51,7 +62,9 @@ const sendOTPController = asyncHandler(async (req, res) => {
     });
 
     await user.save();
+    console.log('   ✅ New user created with role:', role);
   } else {
+    console.log('   ✅ Existing user found, role:', user.role);
     // Optional enhancement: if user exists but is missing a higher role, update it
     const providerExists = await Provider.findOne({
       'personalInfo.phone': fullPhoneNumber
@@ -62,9 +75,11 @@ const sendOTPController = asyncHandler(async (req, res) => {
       user.role = 'provider';
       user.providerId = providerExists._id;
       await user.save();
+      console.log('   🔄 User role updated to provider');
     } else if (isAdmin && user.role !== 'admin') {
       user.role = 'admin';
       await user.save();
+      console.log('   🔄 User role updated to admin');
     }
   }
 
@@ -75,11 +90,16 @@ const sendOTPController = asyncHandler(async (req, res) => {
   });
 
   if (recentOTP) {
+    console.log('   ⚠️  OTP request too frequent');
     throw new AppError('Please wait before requesting another OTP', 429);
   }
 
   // Clean up old OTPs
-  await OTP.deleteMany({ phoneNumber: fullPhoneNumber });
+  await OTP.deleteMany({ 
+    phoneNumber: fullPhoneNumber,
+    expiresAt: { $lt: new Date() }
+  });
+  console.log('   🗑️  Cleaned up expired OTPs');
 
   // Generate and hash OTP
   const otpCode = generateOTP();
@@ -94,15 +114,24 @@ const sendOTPController = asyncHandler(async (req, res) => {
   });
 
   await otpDoc.save();
+  console.log('   💾 OTP saved to database');
 
-  // Send SMS
+  // Send SMS with detailed debugging
   const smsMessage = `Your ServiceConnect verification code is: ${otpCode}. Valid for 10 minutes.`;
+  
+  console.log('   📤 Attempting to send SMS...');
+  console.log('   📱 To:', fullPhoneNumber);
+  console.log('   📝 Message:', smsMessage);
+  
   const smsSent = await sendSMS(fullPhoneNumber, smsMessage);
 
   if (!smsSent) {
+    console.log('   ❌ SMS sending failed - deleting OTP from database');
     await OTP.deleteOne({ _id: otpDoc._id });
-    throw new AppError('Failed to send verification code', 500);
+    throw new AppError('Failed to send verification code. Please try again.', 500);
   }
+
+  console.log('   ✅ SMS sent successfully!');
 
   res.status(200).json({
     success: true,
@@ -341,3 +370,4 @@ export {
   logoutController,
   logoutAllController
 };
+
