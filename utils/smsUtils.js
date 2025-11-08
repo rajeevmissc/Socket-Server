@@ -2,8 +2,8 @@
 import twilio from 'twilio';
 
 // Twilio Configuration
-const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
-const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || 'ACac7af367690b65c0';
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || 'f4e2e997b6e88cee9121ecb7';
 const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER || '+14155238886'; // Your Twilio number
 const TWILIO_WHATSAPP_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
 
@@ -46,24 +46,66 @@ export const sendTwilioSMS = async (phoneNumber, message) => {
 };
 
 /**
- * Send WhatsApp message using Twilio
+ * Format WhatsApp OTP message with professional template
+ * @param {string} otpCode - OTP code
+ * @param {number} expiryMinutes - OTP expiry time in minutes
+ * @returns {string} Formatted WhatsApp message
+ */
+const formatWhatsAppOTPMessage = (otpCode, expiryMinutes = 10) => {
+  return `🔐 *ServiceConnect Verification*
+
+Hello! 👋
+
+Your verification code is:
+
+*${otpCode}*
+
+⏰ Valid for *${expiryMinutes} minutes*
+🔒 Keep this code confidential
+
+_If you didn't request this code, please ignore this message._
+
+---
+ServiceConnect - Your Trusted Service Partner
+Need help? Contact support`;
+};
+
+/**
+ * Format SMS OTP message (shorter for SMS character limits)
+ * @param {string} otpCode - OTP code
+ * @param {number} expiryMinutes - OTP expiry time in minutes
+ * @returns {string} Formatted SMS message
+ */
+const formatSMSOTPMessage = (otpCode, expiryMinutes = 10) => {
+  return `ServiceConnect: Your verification code is ${otpCode}. Valid for ${expiryMinutes} minutes. Don't share this code.`;
+};
+
+/**
+ * Send WhatsApp message using Twilio with professional template
  * @param {string} phoneNumber - Recipient phone number (with country code)
  * @param {string} message - WhatsApp message
+ * @param {boolean} isOTP - Whether this is an OTP message (will format accordingly)
+ * @param {string} otpCode - OTP code (if isOTP is true)
  * @returns {Promise<boolean>} Success status
  */
-export const sendWhatsAppMessage = async (phoneNumber, message) => {
+export const sendWhatsAppMessage = async (phoneNumber, message, isOTP = false, otpCode = null) => {
   try {
     // Format phone number for WhatsApp
     const whatsappTo = phoneNumber.startsWith('whatsapp:') 
       ? phoneNumber 
       : `whatsapp:${phoneNumber}`;
 
+    // Use professional template for OTP messages
+    const finalMessage = (isOTP && otpCode) 
+      ? formatWhatsAppOTPMessage(otpCode) 
+      : message;
+
     console.log('📱 Sending WhatsApp message via Twilio...');
     console.log(`   To: ${whatsappTo}`);
-    console.log(`   Message: ${message}`);
+    console.log(`   Message Type: ${isOTP ? 'OTP' : 'General'}`);
 
     const response = await twilioClient.messages.create({
-      body: message,
+      body: finalMessage,
       from: TWILIO_WHATSAPP_NUMBER,
       to: whatsappTo
     });
@@ -183,6 +225,3 @@ export const sendSMS = async (phoneNumber, message, options = {}, retryCount = 0
 export const sendWhatsApp = async (phoneNumber, message) => {
   return sendSMS(phoneNumber, message, { preferWhatsApp: true });
 };
-
-
-
