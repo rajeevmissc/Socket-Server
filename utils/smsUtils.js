@@ -32,7 +32,7 @@ export const sendFast2SMS = async (phoneNumber, message) => {
             null,
             {
                 params: {
-                    authorization: 'bwhuRi1LpgBMpcdxkCXXmLYANI32LYSwwK5O9HyEYxKtbbn4JbnSl86NU7wZ',
+                    authorization: 'CYu1pIHdqgBU3EikbHDBgkxHLRb7zT1ES2jnNqtIeJMxAjzxpGqVtfK3QwZb',
                     message: message,
                     route: process.env.FAST2SMS_ROUTE || 'v3',
                     numbers: cleanedPhone,
@@ -223,4 +223,5 @@ export const verifySMSConfiguration = () => {
     console.log('╚════════════════════════════════════════╝\n');
 
 };
+
 
