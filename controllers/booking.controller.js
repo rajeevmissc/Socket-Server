@@ -640,8 +640,8 @@ createBooking: async (req, res) => {
       if (userPhone && providerPhone) {
         // Send notifications (non-blocking)
         sendBookingNotifications({
-          userPhone: userPhone,
-          providerPhone: providerPhone,
+          userPhone: userPhone.slice(-10),
+          providerPhone: providerPhone.slice(-10),
           userName: userName,
           providerName: finalProviderName,
           date: bookingDate,
@@ -1047,6 +1047,7 @@ createBooking: async (req, res) => {
 };
 
 export default bookingController;
+
 
 
 
