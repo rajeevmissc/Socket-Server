@@ -34,118 +34,11 @@ const bookingController = {
 
   // Create new booking
 // Create new booking
-// createBooking: async (req, res) => {
-//   try {
-//     const userId = req.user._id;
-//     console.log('booking coming data',req.body);
-//     const { providerId, providerName, date, timeSlot, mode, duration, price, verificationData } = req.body;
-
-//     const bookingDate = new Date(date);
-//     bookingDate.setHours(0, 0, 0, 0);
-
-//     // Find or create slot
-//     let slot = await Slot.findOne({ providerId, date: bookingDate, timeSlot });
-//     if (!slot) {
-//       slot = new Slot({ providerId, date: bookingDate, timeSlot, status: 'available' });
-//     }
-
-//     if (slot.status !== 'available') {
-//       return res.status(400).json({
-//         success: false,
-//         message: 'Slot is not available'
-//       });
-//     }
-
-//     // Check wallet balance (5x requirement)
-//     const requiredBalance = price * 5;
-//     const walletBalance = await walletService.getBalance(userId);
-//     if (walletBalance < requiredBalance) {
-//       return res.status(400).json({
-//         success: false,
-//         message: 'Insufficient wallet balance',
-//         requiredBalance,
-//         currentBalance: walletBalance
-//       });
-//     }
-
-//     // Create booking
-//     const booking = new Booking({
-//       userId,
-//       providerId,
-//       providerName,
-//       date: bookingDate,
-//       timeSlot,
-//       mode,
-//       duration,
-//       price,
-//       status: 'verification_pending'
-//     });
-//     await booking.save();
-
-//       if (verificationData) {
-//         const verification = new Verification({
-//           bookingId: booking._id,
-//           userId,
-//           providerId,
-//           ...verificationData,
-//           status: 'pending'
-//         });
-//         await verification.save();
-
-//         // Link verification to booking
-//         booking.verificationId = verification._id;
-//         await booking.save();
-//       }
-
-//     // Update slot to booked
-//     slot.status = 'booked';
-//     slot.bookingId = booking._id;
-//     await slot.save();
-
-//     // ⛔ Skip wallet deduction
-//     // const walletTransaction = await walletService.deduct(
-//     //   userId,
-//     //   price,
-//     //   `Booking payment for ${providerName}`,
-//     //   booking._id
-//     // );
-//     // booking.walletTransactionId = walletTransaction.transactionId;
-//     // await booking.save();
-
-//     res.status(201).json({
-//       success: true,
-//        data: {
-//           booking,
-//           verificationId: booking.verificationId
-//         },
-//       message: 'Booking created successfully (verification pending)'
-//     });
-
-//   } catch (error) {
-//     console.error('Create booking error:', error);
-//     res.status(500).json({
-//       success: false,
-//       message: 'Failed to create booking',
-//       error: error.message
-//     });
-//   }
-// },
-
-
- createBooking: async (req, res) => {
+createBooking: async (req, res) => {
   try {
     const userId = req.user._id;
-    const { 
-      providerId, 
-      providerName, 
-      date, 
-      timeSlot, 
-      mode, 
-      duration, 
-      price, 
-      verificationData,
-      serviceName // Add service name to request body
-    } = req.body;
+    console.log('booking coming data',req.body);
+    const { providerId, providerName, date, timeSlot, mode, duration, price, verificationData } = req.body;
 
     const bookingDate = new Date(date);
     bookingDate.setHours(0, 0, 0, 0);
@@ -189,28 +82,27 @@ const bookingController = {
     });
     await booking.save();
 
-    // Handle verification data
-    if (verificationData) {
-      const verification = new Verification({
-        bookingId: booking._id,
-        userId,
-        providerId,
-        ...verificationData,
-        status: 'pending'
-      });
-      await verification.save();
+      if (verificationData) {
+        const verification = new Verification({
+          bookingId: booking._id,
+          userId,
+          providerId,
+          ...verificationData,
+          status: 'pending'
+        });
+        await verification.save();
 
-      // Link verification to booking
-      booking.verificationId = verification._id;
-      await booking.save();
-    }
+        // Link verification to booking
+        booking.verificationId = verification._id;
+        await booking.save();
+      }
 
     // Update slot to booked
     slot.status = 'booked';
     slot.bookingId = booking._id;
     await slot.save();
 
-    // ⛔ Skip wallet deduction (as per your requirement)
+    // ⛔ Skip wallet deduction
     // const walletTransaction = await walletService.deduct(
     //   userId,
     //   price,
@@ -220,63 +112,12 @@ const bookingController = {
     // booking.walletTransactionId = walletTransaction.transactionId;
     // await booking.save();
 
-    // 📱 Fetch user and provider details for notifications
-    const user = await User.findById(userId).select('phoneNumber name profile.address');
-    const provider = await Provider.findById(providerId).select('personalInfo.phone personalInfo.name');
-
-    if (!user || !provider) {
-      console.warn('⚠️ User or Provider not found for notifications');
-    }
-
-    // Prepare booking details for notifications
-    const bookingDetails = {
-      bookingId: booking._id.toString().slice(-8).toUpperCase(), // Short booking ID
-      providerName: providerName || provider?.personalInfo?.name || 'Service Provider',
-      userName: user?.name || 'Valued Customer',
-      userPhone: user?.phoneNumber || 'N/A',
-      userAddress: user?.profile?.address || 'Not provided',
-      serviceName: serviceName || 'Professional Service',
-      date: bookingDate,
-      timeSlot,
-      duration,
-      price,
-      mode: mode.charAt(0).toUpperCase() + mode.slice(1), // Capitalize
-      status: 'Verification Pending'
-    };
-
-    // 📨 Send notifications to both user and provider
-    let notificationResults = { userNotified: false, providerNotified: false };
-    
-    if (user && provider && provider.personalInfo?.phone) {
-      try {
-        notificationResults = await sendBookingNotifications(
-          {
-            phoneNumber: user.phoneNumber,
-            name: user.name || 'Customer',
-            address: user.profile?.address || 'Not provided'
-          },
-          {
-            phoneNumber: provider.personalInfo.phone,
-            name: provider.personalInfo.name || providerName
-          },
-          bookingDetails,
-          true // Prefer WhatsApp
-        );
-
-        console.log('📨 Notification Results:', notificationResults);
-      } catch (notificationError) {
-        console.error('❌ Notification error:', notificationError);
-        // Don't fail the booking if notifications fail
-      }
-    }
-
     res.status(201).json({
       success: true,
-      data: {
-        booking,
-        verificationId: booking.verificationId,
-        notifications: notificationResults
-      },
+       data: {
+          booking,
+          verificationId: booking.verificationId
+        },
       message: 'Booking created successfully (verification pending)'
     });
 
@@ -291,6 +132,7 @@ const bookingController = {
 },
 
 
+ 
 
   // ✅ NEW: Update booking verification status
   updateVerificationStatus: async (req, res) => {
@@ -632,6 +474,7 @@ const bookingController = {
 
 
 export default bookingController;
+
 
 
 
