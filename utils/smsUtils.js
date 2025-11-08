@@ -241,43 +241,13 @@ const TWILIO_WHATSAPP_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+
 // Initialize Twilio client
 const twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
 
-/**
- * Send SMS using Twilio
- */
-export const sendTwilioSMS = async (phoneNumber, message) => {
-  try {
-    console.log('📤 Sending SMS via Twilio...');
-    console.log(`   To: ${phoneNumber}`);
-    console.log(`   Message: ${message}`);
-
-    const response = await twilioClient.messages.create({
-      body: message,
-      from: TWILIO_PHONE_NUMBER,
-      to: phoneNumber
-    });
-
-    console.log('✅ Twilio SMS sent successfully!');
-    console.log(`   Message SID: ${response.sid}`);
-    console.log(`   Status: ${response.status}`);
-    
-    return true;
-  } catch (error) {
-    console.error('❌ Twilio SMS Error:', error.message);
-    if (error.code) {
-      console.error(`   Error Code: ${error.code}`);
-    }
-    if (error.moreInfo) {
-      console.error(`   More Info: ${error.moreInfo}`);
-    }
-    return false;
-  }
-};
+// ==================== MESSAGE TEMPLATES ====================
 
 /**
  * Format WhatsApp OTP message with professional template
  */
-const formatWhatsAppOTPMessage = (otpCode, expiryMinutes = 10) => {
-  return `🔐 *ServiceConnect Verification*
+const formatWhatsAppOTPMessage = (otpCode, expiryMinutes = 10, serviceName = "ServiceConnect") => {
+  return `🔐 *${serviceName} Verification*
 
 Hello! 👋
 
@@ -291,15 +261,67 @@ Your verification code is:
 _If you didn't request this code, please ignore this message._
 
 ---
-ServiceConnect - Your Trusted Service Partner
+${serviceName} - Your Trusted Service Partner
 Need help? Contact support`;
 };
 
 /**
- * Format SMS OTP message (shorter for SMS character limits)
+ * Format SMS OTP message with professional template (optimized for SMS)
  */
-const formatSMSOTPMessage = (otpCode, expiryMinutes = 10) => {
-  return `ServiceConnect: Your verification code is ${otpCode}. Valid for ${expiryMinutes} minutes. Don't share this code.`;
+const formatSMSOTPMessage = (otpCode, expiryMinutes = 10, serviceName = "ServiceConnect") => {
+  return `🔐 ${serviceName} Verification\n\nYour OTP is: ${otpCode}\n\nValid for ${expiryMinutes} minutes. Do not share with anyone.\n\n- ${serviceName} Team`;
+};
+
+/**
+ * Format professional OTP message for general use
+ */
+const formatProfessionalOTPMessage = (otpCode, expiryMinutes = 10, serviceName = "ServiceConnect") => {
+  return `🔐 ${serviceName} Verification Code\n\n${otpCode}\n\nThis code will expire in ${expiryMinutes} minutes.\n\nFor your security, please do not share this code with anyone.\n\nThank you,\n${serviceName} Team`;
+};
+
+// ==================== CORE SMS FUNCTIONS ====================
+
+/**
+ * Send SMS using Twilio with OTP template support
+ */
+export const sendTwilioSMS = async (phoneNumber, message, isOTP = false, otpCode = null) => {
+  try {
+    console.log('📤 Sending SMS via Twilio...');
+    console.log(`   To: ${phoneNumber}`);
+    console.log(`   Type: ${isOTP ? 'OTP Template' : 'General Message'}`);
+
+    const finalMessage = (isOTP && otpCode) 
+      ? formatSMSOTPMessage(otpCode)
+      : message;
+
+    const response = await twilioClient.messages.create({
+      body: finalMessage,
+      from: TWILIO_PHONE_NUMBER,
+      to: phoneNumber
+    });
+
+    console.log('✅ Twilio SMS sent successfully!');
+    console.log(`   Message SID: ${response.sid}`);
+    console.log(`   Status: ${response.status}`);
+    
+    return {
+      success: true,
+      messageSid: response.sid,
+      status: response.status
+    };
+  } catch (error) {
+    console.error('❌ Twilio SMS Error:', error.message);
+    if (error.code) {
+      console.error(`   Error Code: ${error.code}`);
+    }
+    if (error.moreInfo) {
+      console.error(`   More Info: ${error.moreInfo}`);
+    }
+    return {
+      success: false,
+      error: error.message
+    };
+  }
 };
 
 /**
@@ -317,7 +339,7 @@ export const sendWhatsAppMessage = async (phoneNumber, message, isOTP = false, o
 
     console.log('📱 Sending WhatsApp message via Twilio...');
     console.log(`   To: ${whatsappTo}`);
-    console.log(`   Message Type: ${isOTP ? 'OTP' : 'General'}`);
+    console.log(`   Type: ${isOTP ? 'OTP Template' : 'General Message'}`);
 
     const response = await twilioClient.messages.create({
       body: finalMessage,
@@ -329,7 +351,11 @@ export const sendWhatsAppMessage = async (phoneNumber, message, isOTP = false, o
     console.log(`   Message SID: ${response.sid}`);
     console.log(`   Status: ${response.status}`);
     
-    return true;
+    return {
+      success: true,
+      messageSid: response.sid,
+      status: response.status
+    };
   } catch (error) {
     console.error('❌ Twilio WhatsApp Error:', error.message);
     if (error.code) {
@@ -338,7 +364,182 @@ export const sendWhatsAppMessage = async (phoneNumber, message, isOTP = false, o
     if (error.moreInfo) {
       console.error(`   More Info: ${error.moreInfo}`);
     }
-    return false;
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+// ==================== ENHANCED OTP FUNCTIONS ====================
+
+/**
+ * Send OTP via SMS with professional template
+ */
+export const sendOTPViaSMS = async (phoneNumber, otpCode, expiryMinutes = 10) => {
+  console.log(`\n🔐 Sending OTP via SMS to ${phoneNumber}`);
+  console.log(`   OTP: ${otpCode}`);
+  console.log(`   Expiry: ${expiryMinutes} minutes`);
+  
+  const formattedPhoneNumber = phoneNumber.startsWith('+')
+    ? phoneNumber
+    : `+${phoneNumber}`;
+
+  return await sendTwilioSMS(formattedPhoneNumber, null, true, otpCode);
+};
+
+/**
+ * Send OTP via WhatsApp with professional template
+ */
+export const sendOTPViaWhatsApp = async (phoneNumber, otpCode, expiryMinutes = 10) => {
+  console.log(`\n🔐 Sending OTP via WhatsApp to ${phoneNumber}`);
+  console.log(`   OTP: ${otpCode}`);
+  console.log(`   Expiry: ${expiryMinutes} minutes`);
+  
+  const formattedPhoneNumber = phoneNumber.startsWith('+')
+    ? phoneNumber
+    : `+${phoneNumber}`;
+
+  return await sendWhatsAppMessage(formattedPhoneNumber, null, true, otpCode);
+};
+
+/**
+ * Send OTP via preferred channel (SMS first, then WhatsApp fallback)
+ */
+export const sendOTP = async (phoneNumber, otpCode, expiryMinutes = 10, options = {}) => {
+  const { preferWhatsApp = false, sendBoth = false } = options;
+  
+  console.log(`\n🔐 Sending OTP to ${phoneNumber}`);
+  console.log(`   OTP: ${otpCode}`);
+  console.log(`   Expiry: ${expiryMinutes} minutes`);
+  console.log(`   Strategy: ${sendBoth ? 'Both channels' : preferWhatsApp ? 'WhatsApp preferred' : 'SMS preferred'}`);
+
+  const formattedPhoneNumber = phoneNumber.startsWith('+')
+    ? phoneNumber
+    : `+${phoneNumber}`;
+
+  try {
+    if (sendBoth) {
+      // Send via both channels
+      const results = await Promise.allSettled([
+        sendOTPViaSMS(formattedPhoneNumber, otpCode, expiryMinutes),
+        sendOTPViaWhatsApp(formattedPhoneNumber, otpCode, expiryMinutes)
+      ]);
+
+      return {
+        sms: results[0].status === 'fulfilled' ? results[0].value : { success: false, error: results[0].reason },
+        whatsapp: results[1].status === 'fulfilled' ? results[1].value : { success: false, error: results[1].reason },
+        success: (results[0].status === 'fulfilled' && results[0].value.success) || 
+                (results[1].status === 'fulfilled' && results[1].value.success)
+      };
+    }
+
+    if (preferWhatsApp) {
+      // Try WhatsApp first, then SMS fallback
+      const whatsappResult = await sendOTPViaWhatsApp(formattedPhoneNumber, otpCode, expiryMinutes);
+      if (whatsappResult.success) {
+        return { success: true, channel: 'whatsapp', details: whatsappResult };
+      }
+      
+      console.log('⚠️  WhatsApp OTP failed, trying SMS...');
+      const smsResult = await sendOTPViaSMS(formattedPhoneNumber, otpCode, expiryMinutes);
+      return { 
+        success: smsResult.success, 
+        channel: smsResult.success ? 'sms' : 'none',
+        details: smsResult 
+      };
+    }
+
+    // Try SMS first, then WhatsApp fallback (default)
+    const smsResult = await sendOTPViaSMS(formattedPhoneNumber, otpCode, expiryMinutes);
+    if (smsResult.success) {
+      return { success: true, channel: 'sms', details: smsResult };
+    }
+    
+    console.log('⚠️  SMS OTP failed, trying WhatsApp...');
+    const whatsappResult = await sendOTPViaWhatsApp(formattedPhoneNumber, otpCode, expiryMinutes);
+    return { 
+      success: whatsappResult.success, 
+      channel: whatsappResult.success ? 'whatsapp' : 'none',
+      details: whatsappResult 
+    };
+
+  } catch (error) {
+    console.error('❌ OTP sending failed:', error);
+    return { success: false, channel: 'none', error: error.message };
+  }
+};
+
+// ==================== ENHANCED MAIN FUNCTIONS ====================
+
+/**
+ * Main SMS sending function with improved OTP support
+ */
+export const sendSMS = async (phoneNumber, message, options = {}) => {
+  if (!phoneNumber) {
+    console.error('❌ Phone number is required');
+    return { success: false, error: 'Phone number is required' };
+  }
+
+  const { isOTP = false, otpCode = null, sendWhatsApp = false, preferWhatsApp = false } = options;
+
+  // For OTP messages, message parameter is optional
+  if (!isOTP && !message) {
+    console.error('❌ Message is required for non-OTP messages');
+    return { success: false, error: 'Message is required for non-OTP messages' };
+  }
+
+  const formattedPhoneNumber = phoneNumber.startsWith('+')
+    ? phoneNumber
+    : `+${phoneNumber}`;
+
+  console.log(`\n🚀 Attempting to send ${isOTP ? 'OTP' : 'message'} to ${formattedPhoneNumber}`);
+  console.log(`   Channel: ${sendWhatsApp ? 'Both' : preferWhatsApp ? 'WhatsApp' : 'SMS'}`);
+
+  try {
+    if (isOTP && otpCode) {
+      // Use dedicated OTP function for OTP messages
+      return await sendOTP(formattedPhoneNumber, otpCode, 10, { preferWhatsApp, sendBoth: sendWhatsApp });
+    }
+
+    // Regular message flow
+    if (sendWhatsApp) {
+      const results = await Promise.allSettled([
+        sendTwilioSMS(formattedPhoneNumber, message),
+        sendWhatsAppMessage(formattedPhoneNumber, message)
+      ]);
+
+      return {
+        sms: results[0].status === 'fulfilled' ? results[0].value : { success: false, error: results[0].reason },
+        whatsapp: results[1].status === 'fulfilled' ? results[1].value : { success: false, error: results[1].reason },
+        success: (results[0].status === 'fulfilled' && results[0].value.success) || 
+                (results[1].status === 'fulfilled' && results[1].value.success)
+      };
+    }
+
+    if (preferWhatsApp) {
+      const whatsappResult = await sendWhatsAppMessage(formattedPhoneNumber, message);
+      if (whatsappResult.success) return { success: true, channel: 'whatsapp', details: whatsappResult };
+      
+      console.log('⚠️  WhatsApp failed, trying SMS...');
+      const smsResult = await sendTwilioSMS(formattedPhoneNumber, message);
+      return { 
+        success: smsResult.success, 
+        channel: smsResult.success ? 'sms' : 'none',
+        details: smsResult 
+      };
+    }
+
+    const smsResult = await sendTwilioSMS(formattedPhoneNumber, message);
+    return { 
+      success: smsResult.success, 
+      channel: smsResult.success ? 'sms' : 'none',
+      details: smsResult 
+    };
+
+  } catch (error) {
+    console.error('❌ Message sending failed:', error);
+    return { success: false, error: error.message };
   }
 };
 
@@ -354,8 +555,10 @@ export const sendBothSMSAndWhatsApp = async (phoneNumber, message) => {
   ]);
 
   return {
-    sms: results[0].status === 'fulfilled' ? results[0].value : false,
-    whatsapp: results[1].status === 'fulfilled' ? results[1].value : false
+    sms: results[0].status === 'fulfilled' ? results[0].value : { success: false, error: results[0].reason },
+    whatsapp: results[1].status === 'fulfilled' ? results[1].value : { success: false, error: results[1].reason },
+    success: (results[0].status === 'fulfilled' && results[0].value.success) || 
+            (results[1].status === 'fulfilled' && results[1].value.success)
   };
 };
 
@@ -367,56 +570,11 @@ const sendMockMessage = async (phoneNumber, message, type = 'SMS') => {
   console.log(`To: ${phoneNumber}`);
   console.log(`Message: ${message}`);
   console.log(`✅ Delivered (Mock Mode)\n`);
-  return true;
-};
-
-/**
- * Main SMS sending function with retry logic
- */
-export const sendSMS = async (phoneNumber, message, options = {}, retryCount = 0) => {
-  if (!phoneNumber || !message) {
-    console.error('❌ Phone number and message are required');
-    return false;
-  }
-
-  const formattedPhoneNumber = phoneNumber.startsWith('+')
-    ? phoneNumber
-    : `+${phoneNumber}`;
-
-  console.log(`\n🚀 Attempting to send message to ${formattedPhoneNumber}`);
-  console.log(`   Message length: ${message.length} characters`);
-
-  try {
-    const { sendWhatsApp = false, preferWhatsApp = false } = options;
-
-    if (sendWhatsApp) {
-      const results = await sendBothSMSAndWhatsApp(formattedPhoneNumber, message);
-      return results.sms || results.whatsapp;
-    }
-
-    if (preferWhatsApp) {
-      const whatsappSuccess = await sendWhatsAppMessage(formattedPhoneNumber, message);
-      if (whatsappSuccess) return true;
-      
-      console.log('⚠️  WhatsApp failed, trying SMS...');
-      return await sendTwilioSMS(formattedPhoneNumber, message);
-    }
-
-    const smsSuccess = await sendTwilioSMS(formattedPhoneNumber, message);
-    if (smsSuccess) return true;
-
-    if (retryCount === 0) {
-      console.log('⚠️  SMS failed, trying WhatsApp...');
-      return await sendWhatsAppMessage(formattedPhoneNumber, message);
-    }
-
-    console.log('⚠️  All methods failed, falling back to mock...');
-    return await sendMockMessage(formattedPhoneNumber, message, 'SMS');
-    
-  } catch (err) {
-    console.error('❌ Message sending failed:', err);
-    return await sendMockMessage(formattedPhoneNumber, message, 'SMS');
-  }
+  return {
+    success: true,
+    channel: 'mock',
+    status: 'delivered'
+  };
 };
 
 /**
@@ -426,7 +584,7 @@ export const sendWhatsApp = async (phoneNumber, message) => {
   return sendSMS(phoneNumber, message, { preferWhatsApp: true });
 };
 
-// ==================== NEW BOOKING NOTIFICATION FUNCTIONS ====================
+// ==================== BOOKING NOTIFICATION FUNCTIONS ====================
 
 /**
  * Format booking confirmation message for USER
@@ -567,14 +725,14 @@ export const sendBookingNotifications = async (bookingData) => {
 
     const results = {
       user: {
-        sent: userResult.status === 'fulfilled' && userResult.value,
+        sent: userResult.status === 'fulfilled' && userResult.value.success,
         phone: formattedUserPhone,
-        error: userResult.status === 'rejected' ? userResult.reason : null
+        error: userResult.status === 'rejected' ? userResult.reason : (userResult.status === 'fulfilled' && !userResult.value.success ? userResult.value.error : null)
       },
       provider: {
-        sent: providerResult.status === 'fulfilled' && providerResult.value,
+        sent: providerResult.status === 'fulfilled' && providerResult.value.success,
         phone: formattedProviderPhone,
-        error: providerResult.status === 'rejected' ? providerResult.reason : null
+        error: providerResult.status === 'rejected' ? providerResult.reason : (providerResult.status === 'fulfilled' && !providerResult.value.success ? providerResult.value.error : null)
       }
     };
 
@@ -659,8 +817,14 @@ ServiceConnect - Provider Portal`;
     ]);
 
     return {
-      user: { sent: userResult.status === 'fulfilled' && userResult.value },
-      provider: { sent: providerResult.status === 'fulfilled' && providerResult.value }
+      user: { 
+        sent: userResult.status === 'fulfilled' && userResult.value.success,
+        error: userResult.status === 'rejected' ? userResult.reason : null
+      },
+      provider: { 
+        sent: providerResult.status === 'fulfilled' && providerResult.value.success,
+        error: providerResult.status === 'rejected' ? providerResult.reason : null
+      }
     };
 
   } catch (error) {
@@ -670,4 +834,19 @@ ServiceConnect - Provider Portal`;
       provider: { sent: false, error: error.message }
     };
   }
+};
+
+// ==================== EXPORTS ====================
+
+export default {
+  sendSMS,
+  sendWhatsApp,
+  sendOTP,
+  sendOTPViaSMS,
+  sendOTPViaWhatsApp,
+  sendBothSMSAndWhatsApp,
+  sendBookingNotifications,
+  sendCancellationNotifications,
+  sendTwilioSMS,
+  sendWhatsAppMessage
 };
