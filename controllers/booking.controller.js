@@ -482,7 +482,7 @@
 import Booking from '../models/Booking.model.js';
 import Slot from '../models/Slot.model.js';
 import Verification from '../models/Verification.model.js';
-import User from '../models/User.model.js'; // Add this import
+import User from '../models/Users.js'; // Add this import
 import { walletService } from '../services/wallet.service.js';
 import { sendBookingNotifications, sendCancellationNotifications } from '../utils/smsUtils.js';
 
@@ -1006,3 +1006,4 @@ const bookingController = {
 };
 
 export default bookingController;
+
