@@ -96,16 +96,17 @@ const sendOTPController = asyncHandler(async (req, res) => {
 
   await otpDoc.save();
 
-  // Prepare message
-  const message = `Your ServiceConnect verification code is: ${otpCode}. Valid for 10 minutes.`;
-
-  // Send via SMS or WhatsApp based on user preference
+  // Send OTP with professional template
   let messageSent;
   if (sendViaWhatsApp) {
-    messageSent = await sendWhatsApp(fullPhoneNumber, message);
+    // Send via WhatsApp with professional template
+    messageSent = await sendWhatsApp(fullPhoneNumber, otpCode, true, otpCode);
   } else {
-    // Send via SMS with WhatsApp fallback
-    messageSent = await sendSMS(fullPhoneNumber, message);
+    // Send via SMS with template (and WhatsApp fallback)
+    messageSent = await sendSMS(fullPhoneNumber, otpCode, {
+      isOTP: true,
+      otpCode: otpCode
+    });
   }
 
   if (!messageSent) {
