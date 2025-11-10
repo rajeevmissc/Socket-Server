@@ -59,11 +59,15 @@ const sendOTPController = asyncHandler(async (req, res) => {
     });
     const isAdmin = adminNumbers.includes(fullPhoneNumber);
 
-    if (providerExists && user.role !== 'provider') {
-      user.role = 'provider';
-      user.providerId = providerExists._id;
-      await user.save();
-    } else if (isAdmin && user.role !== 'admin') {
+   if (providerExists) {
+  if (user.role !== 'provider') {
+    user.role = 'provider';
+  }
+  if (!user.providerId) {
+    user.providerId = providerExists._id;
+  }
+  await user.save();
+} else if (isAdmin && user.role !== 'admin') {
       user.role = 'admin';
       await user.save();
     }
@@ -358,4 +362,5 @@ export {
   logoutController,
   logoutAllController
 };
+
 
