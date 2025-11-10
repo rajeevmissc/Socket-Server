@@ -378,16 +378,36 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 // ------------------ Graceful Shutdown (for local development) ------------------
-process.on('SIGTERM', () => {
+// ------------------ Graceful Shutdown (for local development) ------------------
+process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully');
-  mongoose.connection.close(() => {
+
+  try {
+    await mongoose.connection.close();
     console.log('MongoDB connection closed');
+
     httpServer.close(() => {
       console.log('HTTP server closed');
       process.exit(0);
     });
-  });
+  } catch (err) {
+    console.error('Error closing MongoDB connection:', err);
+    process.exit(1);
+  }
 });
+
+process.on('SIGINT', async () => {
+  console.log('SIGINT received, shutting down gracefully');
+  try {
+    await mongoose.connection.close();
+    console.log('MongoDB connection closed');
+    process.exit(0);
+  } catch (err) {
+    console.error('Error during shutdown:', err);
+    process.exit(1);
+  }
+});
+
 
 // ------------------ Local Development Server ------------------
 // ------------------ Start Server (for Render + Local) ------------------
