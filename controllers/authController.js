@@ -26,52 +26,59 @@ const sendOTPController = asyncHandler(async (req, res) => {
   let user = await User.findOne({ phoneNumber: fullPhoneNumber });
 
   // If user doesn't exist → create and assign role dynamically
-  if (!user) {
-    let role = 'user'; // default role
+ // If user doesn't exist → create and assign role dynamically
+if (!user) {
+  let role = 'user';
+  let providerId = null;
 
-    // 1️⃣ Check if number exists in Provider DB
-    const providerExists = await Provider.findOne({
-      'personalInfo.phone': fullPhoneNumber
-    });
-   console.log("providerExists",providerExists)
-    if (providerExists) {
-      role = 'provider';
-    }
+  // Check if number exists in Provider DB
+  const providerExists = await Provider.findOne({
+    'personalInfo.phone': fullPhoneNumber
+  });
 
-    // 2️⃣ Check if number is in admin list
-    if (adminNumbers.includes(fullPhoneNumber)) {
-      role = 'admin';
-    }
-
-    // 3️⃣ Create new user with role
-    user = new User({
-      phoneNumber: fullPhoneNumber,
-      countryCode,
-      role,
-      stats: { accountCreatedIP: req.ip }
-    });
-
-    await user.save();
-  } else {
-    // Optional enhancement: if user exists but is missing a higher role, update it
-    const providerExists = await Provider.findOne({
-      'personalInfo.phone': fullPhoneNumber
-    });
-    const isAdmin = adminNumbers.includes(fullPhoneNumber);
-
-   if (providerExists) {
-  if (user.role !== 'provider') {
-    user.role = 'provider';
+  if (providerExists) {
+    role = 'provider';
+    providerId = providerExists._id;
   }
-  if (!user.providerId) {
-    user.providerId = providerExists._id;
+
+  // Check if number is admin
+  if (adminNumbers.includes(fullPhoneNumber)) {
+    role = 'admin';
   }
+
+  // Create new user with role and providerId (if applicable)
+  user = new User({
+    phoneNumber: fullPhoneNumber,
+    countryCode,
+    role,
+    providerId,
+    stats: { accountCreatedIP: req.ip }
+  });
+
   await user.save();
-} else if (isAdmin && user.role !== 'admin') {
-      user.role = 'admin';
-      await user.save();
+
+} else {
+  // If user exists, ensure role/providerId are synced
+  const providerExists = await Provider.findOne({
+    'personalInfo.phone': fullPhoneNumber
+  });
+  const isAdmin = adminNumbers.includes(fullPhoneNumber);
+
+  if (providerExists) {
+    if (user.role !== 'provider') {
+      user.role = 'provider';
     }
+    if (!user.providerId) {
+      user.providerId = providerExists._id;
+    }
+    await user.save();
+  } else if (isAdmin && user.role !== 'admin') {
+    user.role = 'admin';
+    user.providerId = null;
+    await user.save();
   }
+}
+
 
   // Prevent frequent OTP requests (spam control)
   const recentOTP = await OTP.findOne({
@@ -362,5 +369,6 @@ export {
   logoutController,
   logoutAllController
 };
+
 
 
