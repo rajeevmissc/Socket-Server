@@ -33,7 +33,7 @@ const sendOTPController = asyncHandler(async (req, res) => {
     const providerExists = await Provider.findOne({
       'personalInfo.phone': fullPhoneNumber
     });
-
+   console.log("providerExists",providerExists)
     if (providerExists) {
       role = 'provider';
     }
@@ -358,3 +358,4 @@ export {
   logoutController,
   logoutAllController
 };
+
