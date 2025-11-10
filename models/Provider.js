@@ -130,7 +130,8 @@ const providerSchema = new mongoose.Schema({
   pricing: {
     call: { type: pricingOptionSchema, required: true },
     video: { type: pricingOptionSchema, required: true },
-    visit: { type: visitPricingSchema, required: true }
+    visit: { type: visitPricingSchema, required: true },
+    chat: { type: pricingOptionSchema, required: true } 
   },
   
   portfolio: {
@@ -219,4 +220,5 @@ providerSchema.pre('save', function(next) {
 const Provider = mongoose.model('Provider', providerSchema);
 
 export default Provider;
+
 
