@@ -59,7 +59,7 @@ const providerSchema = new mongoose.Schema({
       enum: ['Male', 'Female', 'Other']
     },
     profileImage: { type: String, default: null },
-    bio: { type: String, required: true, maxlength: 1000 }
+    bio: { type: String, required: true, maxlength: 50000 }
   },
   
   address: {
@@ -220,5 +220,6 @@ providerSchema.pre('save', function(next) {
 const Provider = mongoose.model('Provider', providerSchema);
 
 export default Provider;
+
 
 
