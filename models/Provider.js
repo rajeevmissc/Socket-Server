@@ -38,7 +38,7 @@ const providerSchema = new mongoose.Schema({
     firstName: { type: String, required: true, trim: true },
     lastName: { type: String, required: true, trim: true },
     fullName: { type: String, required: true },
-    role: {type: String, required: true },
+    role: {type: String, default: 'provider' },
     email: { 
       type: String, 
       required: true, 
@@ -220,6 +220,7 @@ providerSchema.pre('save', function(next) {
 const Provider = mongoose.model('Provider', providerSchema);
 
 export default Provider;
+
 
 
 
