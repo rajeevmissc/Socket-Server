@@ -30,7 +30,11 @@ const messageSchema = new mongoose.Schema({
   read: {
     type: Boolean,
     default: false
-  }
+  },
+  readBy: [{
+    userId: String,
+    timestamp: Date
+  }]
 });
 
 const chatSessionSchema = new mongoose.Schema({
@@ -83,10 +87,22 @@ const chatSessionSchema = new mongoose.Schema({
   totalCharged: {
     type: Number,
     default: 0
+  },
+  lastMessage: {
+    type: String
+  },
+  lastMessageTime: {
+    type: Date
   }
 }, {
   timestamps: true
 });
+
+// Index for better query performance
+chatSessionSchema.index({ providerId: 1, status: 1 });
+chatSessionSchema.index({ userId: 1, status: 1 });
+chatSessionSchema.index({ roomId: 1 });
+messageSchema.index({ sessionId: 1, timestamp: 1 });
 
 export const ChatSession = mongoose.model('ChatSession', chatSessionSchema);
 export const ChatMessage = mongoose.model('ChatMessage', messageSchema);
