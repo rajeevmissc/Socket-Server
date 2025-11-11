@@ -54,7 +54,7 @@ export const getAllProviders = async (req, res) => {
   try {
     const {
       page = 1,
-      limit = 10,
+      limit = 100,
       category,
       city,
       service,
@@ -227,3 +227,4 @@ export const deleteProvider = async (req, res) => {
     });
   }
 };
+
