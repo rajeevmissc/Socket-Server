@@ -446,7 +446,7 @@ import dotenv from 'dotenv';
 import agoraRoutes from './routes/agora.js';
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
-import chatRoutes from './routes/chat.js';
+import chatRoutes from './routes/Chat.js';
 // Wallet module routes
 import walletRoutes from './routes/wallet.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
