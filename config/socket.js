@@ -52,7 +52,6 @@
 
 
 
-
 import { Server } from 'socket.io';
 import Provider from '../models/Provider.js';
 
@@ -109,14 +108,14 @@ export const initSocket = (server) => {
     });
 
     // ✅ NEW FEATURE: User/Provider registration for chat
-    socket.on('registerUser', ({ userId, userType }) => {
+    socket.on('registerUser', ({ userId, userType, userName }) => {
       if (userType === 'provider') {
         connectedProviders.set(userId, socket.id);
       } else {
         connectedUsers.set(userId, socket.id);
       }
       userSockets.set(userId, socket.id);
-      console.log(`Registered ${userType} ${userId} for chat`);
+      console.log(`Registered ${userType} ${userId} (${userName}) for chat`);
     });
 
     // ✅ NEW FEATURE: Chat room management
@@ -161,6 +160,46 @@ export const initSocket = (server) => {
       console.log(`Chat message sent in room ${data.roomId} by ${data.senderName}`);
     });
 
+    // ✅ NEW FEATURE: Notify provider about new chat session
+    socket.on('notifyNewChatSession', (data) => {
+      const { providerId, sessionId, roomId, userName, userId } = data;
+      const providerSocketId = connectedProviders.get(providerId);
+      
+      if (providerSocketId) {
+        io.to(providerSocketId).emit('newChatSessionNotification', {
+          sessionId,
+          roomId,
+          userName,
+          userId,
+          timestamp: new Date(),
+          message: `New chat request from ${userName}`
+        });
+        console.log(`🔔 Notified provider ${providerId} about new chat session from ${userName}`);
+      } else {
+        console.log(`Provider ${providerId} is not connected - cannot notify about new chat`);
+      }
+    });
+
+    // ✅ NEW FEATURE: Notify provider about new message
+    socket.on('notifyNewMessage', (data) => {
+      const { providerId, sessionId, roomId, senderName, messageText, userId } = data;
+      const providerSocketId = connectedProviders.get(providerId);
+      
+      if (providerSocketId) {
+        io.to(providerSocketId).emit('newMessageNotification', {
+          sessionId,
+          roomId,
+          senderName,
+          messageText: messageText.length > 50 ? messageText.substring(0, 50) + '...' : messageText,
+          userId,
+          timestamp: new Date()
+        });
+        console.log(`📩 Notified provider ${providerId} about new message from ${senderName}`);
+      } else {
+        console.log(`Provider ${providerId} is not connected - message notification failed`);
+      }
+    });
+
     // ✅ NEW FEATURE: Call request from chat
     socket.on('chatCallRequest', (data) => {
       const { providerId, roomId, callType, userName, userId } = data;
@@ -174,7 +213,7 @@ export const initSocket = (server) => {
           userId,
           timestamp: new Date()
         });
-        console.log(`Chat call request sent to provider ${providerId}`);
+        console.log(`📞 Chat call request sent to provider ${providerId}`);
       } else {
         socket.emit('chatCallRequestFailed', {
           message: 'Provider is not available'
