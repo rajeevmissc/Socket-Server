@@ -352,7 +352,42 @@ import { authenticateToken } from '../middleware/authMiddleware.js';
 import { ChatSession, ChatMessage } from '../models/Chat.js';
 
 const router = express.Router();
-
+router.get('/debug/connected-providers', authenticateToken, async (req, res) => {
+  try {
+    const io = req.app.get('io');
+    const connectedProviders = req.app.get('connectedProviders');
+    const userSockets = req.app.get('userSockets');
+    
+    const providersList = Array.from(connectedProviders.entries()).map(([id, socketId]) => ({
+      providerId: id,
+      socketId: socketId
+    }));
+    
+    const allUsers = Array.from(userSockets.entries()).map(([id, socketId]) => ({
+      userId: id,
+      socketId: socketId
+    }));
+    
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      stats: {
+        totalProviders: connectedProviders.size,
+        totalUsers: userSockets.size,
+        socketIOClients: io.sockets.sockets.size
+      },
+      connectedProviders: providersList,
+      allUserSockets: allUsers
+    });
+  } catch (error) {
+    console.error('Debug endpoint error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Debug endpoint failed',
+      error: error.message 
+    });
+  }
+});
 // ----------------------
 // Create new chat session
 // ----------------------
