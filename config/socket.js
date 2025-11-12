@@ -47,8 +47,7 @@
 
 
 
-
-// config/socket.js - Complete Socket.IO implementation
+// config/socket.js - Fixed Socket.IO implementation
 import { Server } from 'socket.io';
 import Provider from '../models/Provider.js';
 
@@ -59,7 +58,9 @@ export const initSocket = (server) => {
     cors: {
       origin: process.env.FRONTEND_URL || '*',
       methods: ['GET', 'POST']
-    }
+    },
+    pingTimeout: 60000,
+    pingInterval: 25000
   });
 
   // Store connected providers and users
@@ -68,9 +69,28 @@ export const initSocket = (server) => {
   const userSockets = new Map();
 
   io.on('connection', (socket) => {
-    console.log('New client connected', socket.id);
+    console.log('🔌 New client connected:', socket.id);
 
-    // ✅ Provider updates presence AND registers for chat
+    // ✅ CRITICAL: Provider registration for CHAT notifications
+    socket.on('registerProvider', ({ providerId, providerName }) => {
+      // Store in all maps for maximum compatibility
+      connectedProviders.set(providerId, socket.id);
+      userSockets.set(providerId, socket.id);
+      
+      console.log(`✅ PROVIDER REGISTERED FOR CHAT: ${providerId} (${providerName})`);
+      console.log(`   Socket ID: ${socket.id}`);
+      console.log(`📊 Total providers connected: ${connectedProviders.size}`);
+      console.log(`   Provider IDs:`, Array.from(connectedProviders.keys()));
+      
+      // Also update database presence
+      Provider.findByIdAndUpdate(providerId, {
+        'presence.isOnline': true,
+        'presence.availabilityStatus': 'online',
+        'presence.lastSeen': new Date()
+      }).catch(err => console.error('Error updating provider presence:', err));
+    });
+
+    // ✅ Provider updates presence (for backward compatibility with calls)
     socket.on('updatePresence', async ({ providerId, isOnline }) => {
       try {
         const status = isOnline ? 'online' : 'offline';
@@ -80,41 +100,24 @@ export const initSocket = (server) => {
           'presence.lastSeen': new Date()
         });
 
-        // ✅ CRITICAL: Store provider connection for chat notifications
+        // ✅ CRITICAL: Also store in chat maps when online
         if (isOnline) {
           connectedProviders.set(providerId, socket.id);
           userSockets.set(providerId, socket.id);
-          console.log(`✅ Provider ${providerId} connected and registered for chat`);
+          console.log(`✅ Provider ${providerId} presence updated - registered for chat`);
         } else {
           connectedProviders.delete(providerId);
           userSockets.delete(providerId);
-          console.log(`❌ Provider ${providerId} disconnected`);
+          console.log(`❌ Provider ${providerId} went offline`);
         }
 
-        console.log(`📊 Total providers connected: ${connectedProviders.size}`);
-        console.log('Connected providers:', Array.from(connectedProviders.keys()));
+        console.log(`📊 Total providers after presence update: ${connectedProviders.size}`);
 
         // Broadcast to all clients
         io.emit('presenceChanged', { providerId, isOnline, status });
       } catch (err) {
-        console.error('Error updating presence', err);
+        console.error('Error updating presence:', err);
       }
-    });
-
-    // ✅ User connection tracking for chat
-    socket.on('userConnected', ({ userId }) => {
-      connectedUsers.set(userId, socket.id);
-      userSockets.set(userId, socket.id);
-      console.log(`✅ User ${userId} connected with socket ${socket.id}`);
-    });
-
-    // ✅ Provider registration specifically for chat
-    socket.on('registerProvider', ({ providerId, providerName }) => {
-      connectedProviders.set(providerId, socket.id);
-      userSockets.set(providerId, socket.id);
-      console.log(`✅ Provider ${providerId} (${providerName}) registered for chat`);
-      console.log(`📊 Total providers connected: ${connectedProviders.size}`);
-      console.log('Connected providers:', Array.from(connectedProviders.keys()));
     });
 
     // ✅ User registration for chat
@@ -122,22 +125,23 @@ export const initSocket = (server) => {
       connectedUsers.set(userId, socket.id);
       userSockets.set(userId, socket.id);
       console.log(`✅ User ${userId} (${userName}) registered for chat`);
+      console.log(`   Socket ID: ${socket.id}`);
     });
 
     // ✅ Chat room management
     socket.on('joinChatRoom', (roomId) => {
       socket.join(roomId);
-      console.log(`Socket ${socket.id} joined chat room: ${roomId}`);
+      console.log(`📥 Socket ${socket.id} joined chat room: ${roomId}`);
     });
 
     socket.on('leaveChatRoom', (roomId) => {
       socket.leave(roomId);
-      console.log(`Socket ${socket.id} left chat room: ${roomId}`);
+      console.log(`📤 Socket ${socket.id} left chat room: ${roomId}`);
     });
 
-    // ✅ Handle disconnection - clean up maps
+    // ✅ Handle disconnection - clean up all maps
     socket.on('disconnect', () => {
-      console.log('Client disconnected', socket.id);
+      console.log('🔌 Client disconnected:', socket.id);
       
       // Clean up connected providers
       for (const [providerId, socketId] of connectedProviders.entries()) {
@@ -151,7 +155,7 @@ export const initSocket = (server) => {
             'presence.isOnline': false,
             'presence.availabilityStatus': 'offline',
             'presence.lastSeen': new Date()
-          }).catch(err => console.error('Error updating presence on disconnect', err));
+          }).catch(err => console.error('Error updating presence on disconnect:', err));
           break;
         }
       }
@@ -168,12 +172,27 @@ export const initSocket = (server) => {
 
       console.log(`📊 Remaining: ${connectedProviders.size} providers, ${connectedUsers.size} users`);
     });
+
+    // ✅ Periodic connection status log (every 30 seconds)
+    const statusInterval = setInterval(() => {
+      console.log(`📊 SOCKET STATUS CHECK:`);
+      console.log(`   Connected providers: ${connectedProviders.size}`);
+      console.log(`   Provider IDs:`, Array.from(connectedProviders.keys()));
+      console.log(`   Total socket clients: ${io.sockets.sockets.size}`);
+    }, 30000);
+
+    socket.on('disconnect', () => {
+      clearInterval(statusInterval);
+    });
   });
 
   // Make connected maps available to routes
   io.connectedProviders = connectedProviders;
   io.connectedUsers = connectedUsers;
   io.userSockets = userSockets;
+
+  console.log('✅ Socket.IO initialized successfully');
+  console.log(`   CORS origin: ${process.env.FRONTEND_URL || '*'}`);
 
   return io;
 };
