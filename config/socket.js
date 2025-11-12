@@ -100,6 +100,17 @@ export const initSocket = (server) => {
       }
     });
 
+
+    // Notify when provider joins
+socket.on('providerJoined', (data) => {
+  socket.to(data.roomId).emit('providerJoined', {
+    roomId: data.roomId,
+    sessionId: data.sessionId,
+    providerName: data.providerName,
+    timestamp: new Date()
+  });
+});
+    
     // ✅ EXISTING FEATURE: User connection tracking
     socket.on('userConnected', ({ userId }) => {
       connectedUsers.set(userId, socket.id);
@@ -296,3 +307,4 @@ export const getIo = () => {
   if (!io) throw new Error('Socket.io not initialized!');
   return io;
 };
+
