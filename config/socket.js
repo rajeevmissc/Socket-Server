@@ -48,8 +48,7 @@
 
 
 
-
-
+// config/socket.js - Complete Socket.IO implementation
 import { Server } from 'socket.io';
 import Provider from '../models/Provider.js';
 
@@ -66,12 +65,12 @@ export const initSocket = (server) => {
   // Store connected providers and users
   const connectedProviders = new Map();
   const connectedUsers = new Map();
-  const userSockets = new Map(); // Track socket by user ID
+  const userSockets = new Map();
 
   io.on('connection', (socket) => {
     console.log('New client connected', socket.id);
 
-    // ✅ EXISTING FEATURE: Provider updates presence
+    // ✅ Provider updates presence AND registers for chat
     socket.on('updatePresence', async ({ providerId, isOnline }) => {
       try {
         const status = isOnline ? 'online' : 'offline';
@@ -81,54 +80,51 @@ export const initSocket = (server) => {
           'presence.lastSeen': new Date()
         });
 
-        // Store provider connection
+        // ✅ CRITICAL: Store provider connection for chat notifications
         if (isOnline) {
           connectedProviders.set(providerId, socket.id);
           userSockets.set(providerId, socket.id);
+          console.log(`✅ Provider ${providerId} connected and registered for chat`);
         } else {
           connectedProviders.delete(providerId);
           userSockets.delete(providerId);
+          console.log(`❌ Provider ${providerId} disconnected`);
         }
+
+        console.log(`📊 Total providers connected: ${connectedProviders.size}`);
+        console.log('Connected providers:', Array.from(connectedProviders.keys()));
 
         // Broadcast to all clients
         io.emit('presenceChanged', { providerId, isOnline, status });
-        console.log(`Provider ${providerId} presence updated: ${status}`);
       } catch (err) {
         console.error('Error updating presence', err);
       }
     });
 
-    // Notify when provider joins
-    socket.on('providerJoined', (data) => {
-      socket.to(data.roomId).emit('providerJoined', {
-        roomId: data.roomId,
-        sessionId: data.sessionId,
-        providerName: data.providerName,
-        timestamp: new Date()
-      });
-    });
-    
-    // ✅ EXISTING FEATURE: User connection tracking
+    // ✅ User connection tracking for chat
     socket.on('userConnected', ({ userId }) => {
       connectedUsers.set(userId, socket.id);
       userSockets.set(userId, socket.id);
-      console.log(`User ${userId} connected with socket ${socket.id}`);
+      console.log(`✅ User ${userId} connected with socket ${socket.id}`);
     });
 
-    // ✅ FIXED: User/Provider registration for chat
-    socket.on('registerUser', ({ userId, userType, userName }) => {
-      if (userType === 'provider') {
-        connectedProviders.set(userId, socket.id);
-        console.log(`📝 Registered provider ${userId} (${userName}) with socket ${socket.id}`);
-        console.log(`Total providers connected: ${connectedProviders.size}`);
-      } else {
-        connectedUsers.set(userId, socket.id);
-        console.log(`📝 Registered user ${userId} (${userName}) with socket ${socket.id}`);
-      }
+    // ✅ Provider registration specifically for chat
+    socket.on('registerProvider', ({ providerId, providerName }) => {
+      connectedProviders.set(providerId, socket.id);
+      userSockets.set(providerId, socket.id);
+      console.log(`✅ Provider ${providerId} (${providerName}) registered for chat`);
+      console.log(`📊 Total providers connected: ${connectedProviders.size}`);
+      console.log('Connected providers:', Array.from(connectedProviders.keys()));
+    });
+
+    // ✅ User registration for chat
+    socket.on('registerUser', ({ userId, userName }) => {
+      connectedUsers.set(userId, socket.id);
       userSockets.set(userId, socket.id);
+      console.log(`✅ User ${userId} (${userName}) registered for chat`);
     });
 
-    // ✅ NEW FEATURE: Chat room management
+    // ✅ Chat room management
     socket.on('joinChatRoom', (roomId) => {
       socket.join(roomId);
       console.log(`Socket ${socket.id} joined chat room: ${roomId}`);
@@ -139,84 +135,7 @@ export const initSocket = (server) => {
       console.log(`Socket ${socket.id} left chat room: ${roomId}`);
     });
 
-    // ✅ NEW FEATURE: Chat typing indicators
-    socket.on('chatTypingStart', (data) => {
-      socket.to(data.roomId).emit('userTyping', {
-        userId: data.userId,
-        userName: data.userName,
-        isTyping: true,
-        roomId: data.roomId
-      });
-    });
-
-    socket.on('chatTypingStop', (data) => {
-      socket.to(data.roomId).emit('userTyping', {
-        userId: data.userId,
-        userName: data.userName,
-        isTyping: false,
-        roomId: data.roomId
-      });
-    });
-
-    // ✅ NEW FEATURE: Send chat message
-    socket.on('sendChatMessage', (data) => {
-      // Broadcast to everyone in the room except sender
-      socket.to(data.roomId).emit('newChatMessage', {
-        ...data,
-        timestamp: new Date(),
-        messageId: Date.now().toString()
-      });
-      
-      console.log(`Chat message sent in room ${data.roomId} by ${data.senderName}`);
-    });
-
-    // ✅ NEW FEATURE: Call request from chat
-    socket.on('chatCallRequest', (data) => {
-      const { providerId, roomId, callType, userName, userId } = data;
-      const providerSocketId = connectedProviders.get(providerId);
-      
-      if (providerSocketId) {
-        io.to(providerSocketId).emit('incomingCallFromChat', {
-          roomId,
-          callType,
-          userName,
-          userId,
-          timestamp: new Date()
-        });
-        console.log(`📞 Chat call request sent to provider ${providerId}`);
-      } else {
-        socket.emit('chatCallRequestFailed', {
-          message: 'Provider is not available'
-        });
-      }
-    });
-
-    // ✅ NEW FEATURE: Call response from provider
-    socket.on('chatCallResponse', (data) => {
-      const { roomId, accepted, userId } = data;
-      const userSocketId = userSockets.get(userId);
-      
-      if (userSocketId) {
-        io.to(userSocketId).emit('chatCallResponded', {
-          roomId,
-          accepted,
-          timestamp: new Date()
-        });
-        console.log(`Call response sent to user ${userId}: ${accepted ? 'accepted' : 'rejected'}`);
-      }
-    });
-
-    // ✅ NEW FEATURE: Read receipt for messages
-    socket.on('markMessagesRead', (data) => {
-      const { roomId, messageIds, userId } = data;
-      socket.to(roomId).emit('messagesRead', {
-        messageIds,
-        userId,
-        timestamp: new Date()
-      });
-    });
-
-    // ✅ EXISTING + NEW: Handle disconnection
+    // ✅ Handle disconnection - clean up maps
     socket.on('disconnect', () => {
       console.log('Client disconnected', socket.id);
       
@@ -225,9 +144,9 @@ export const initSocket = (server) => {
         if (socketId === socket.id) {
           connectedProviders.delete(providerId);
           userSockets.delete(providerId);
-          console.log(`Provider ${providerId} disconnected`);
+          console.log(`❌ Provider ${providerId} removed from connected providers`);
           
-          // Update presence status
+          // Update presence status in database
           Provider.findByIdAndUpdate(providerId, {
             'presence.isOnline': false,
             'presence.availabilityStatus': 'offline',
@@ -242,15 +161,12 @@ export const initSocket = (server) => {
         if (socketId === socket.id) {
           connectedUsers.delete(userId);
           userSockets.delete(userId);
-          console.log(`User ${userId} disconnected`);
+          console.log(`❌ User ${userId} removed from connected users`);
           break;
         }
       }
-    });
 
-    // ✅ EXISTING FEATURE: Error handling
-    socket.on('error', (error) => {
-      console.error('Socket error:', error);
+      console.log(`📊 Remaining: ${connectedProviders.size} providers, ${connectedUsers.size} users`);
     });
   });
 
