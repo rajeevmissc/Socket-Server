@@ -27,6 +27,19 @@ router.post('/sessions', authenticateToken, async (req, res) => {
 
     await session.save();
 
+    // ✅ NEW: Notify provider about new chat session
+    const io = req.app.get('io');
+    io.emit('notifyNewChatSession', {
+      providerId: providerId,
+      sessionId: session._id,
+      roomId: session.roomId,
+      userName: userName,
+      userId: userId,
+      timestamp: new Date()
+    });
+
+    console.log(`🔔 Created new chat session and notified provider ${providerId}`);
+
     res.status(201).json({
       success: true,
       sessionId: session._id,
@@ -120,12 +133,41 @@ router.post('/messages', authenticateToken, async (req, res) => {
     }
     await session.save();
 
-    // Emit via socket
+    // Emit via socket to chat room
     const io = req.app.get('io');
     io.to(session.roomId).emit('newChatMessage', {
       ...newMessage.toObject(),
       roomId: session.roomId,
     });
+
+    // ✅ NEW: Notify provider if message is from user
+    if (userData.role === 'user') {
+      io.emit('notifyNewMessage', {
+        providerId: session.providerId,
+        sessionId: session._id,
+        roomId: session.roomId,
+        senderName: userData.name || 'User',
+        messageText: message,
+        userId: userData.id,
+        timestamp: new Date()
+      });
+    }
+
+    // ✅ NEW: Notify user if message is from provider
+    if (userData.role === 'provider') {
+      const userSocketId = io.userSockets.get(session.userId);
+      if (userSocketId) {
+        io.to(userSocketId).emit('newMessageNotification', {
+          sessionId: session._id,
+          roomId: session.roomId,
+          senderName: userData.name || 'Provider',
+          messageText: message,
+          timestamp: new Date()
+        });
+      }
+    }
+
+    console.log(`💬 Message sent in session ${sessionId} by ${userData.role}`);
 
     res.json({ success: true, message: newMessage });
   } catch (error) {
