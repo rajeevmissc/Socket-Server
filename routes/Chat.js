@@ -79,6 +79,42 @@ router.get('/sessions/:sessionId', authenticateToken, async (req, res) => {
 });
 
 // ----------------------
+
+
+// Provider joins the chat
+router.post('/sessions/:sessionId/join', authenticateToken, async (req, res) => {
+  try {
+    const session = await ChatSession.findById(req.params.sessionId);
+    if (!session) {
+      return res.status(404).json({ success: false, message: 'Session not found' });
+    }
+
+    // Check if user is the provider for this session
+    const userData = req.user;
+    if (userData.role !== 'provider' || session.providerId !== userData.providerId) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    // Update session status to active
+    session.status = 'active';
+    session.startTime = new Date();
+    await session.save();
+
+    // Notify user that provider joined
+    const io = req.app.get('io');
+    io.to(session.roomId).emit('providerJoined', {
+      sessionId: session._id,
+      roomId: session.roomId,
+      providerName: userData.name
+    });
+
+    res.json({ success: true, session });
+  } catch (error) {
+    console.error('Join session error:', error);
+    res.status(500).json({ success: false, message: 'Failed to join session' });
+  }
+});
+
 // Get messages for a session
 // ----------------------
 router.get('/messages/:sessionId', authenticateToken, async (req, res) => {
