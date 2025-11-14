@@ -233,10 +233,10 @@
 import twilio from 'twilio';
 
 // Twilio Configuration
-const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID || 'ACac7af367690b65c0';
-const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN || 'f4e2e997b6e88cee9121ecb7';
-const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER || '+14155238886';
-const TWILIO_WHATSAPP_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER || 'whatsapp:+14155238886';
+const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
+const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
+const TWILIO_PHONE_NUMBER = '+14155238886';
+const TWILIO_WHATSAPP_NUMBER = 'whatsapp:+14155238886';
 
 // Initialize Twilio client
 const twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
@@ -850,4 +850,5 @@ export default {
   sendTwilioSMS,
   sendWhatsAppMessage
 };
+
 
