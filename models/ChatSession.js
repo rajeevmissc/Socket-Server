@@ -39,4 +39,4 @@ const chatSessionSchema = new mongoose.Schema({
 chatSessionSchema.index({ participants: 1, lastMessageAt: -1 });
 const ChatSession = mongoose.model('ChatSession', chatSessionSchema);
 
-export ChatSession;
+export default ChatSession;
