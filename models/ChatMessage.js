@@ -58,4 +58,4 @@ chatMessageSchema.index({ channelName: 1, timestamp: -1 });
 chatMessageSchema.index({ channelName: 1, senderId: 1 });
 chatMessageSchema.index({ channelName: 1, seenBy: 1 });
 const ChatMessage = mongoose.model('ChatMessage', chatMessageSchema);
-export ChatMessage;
+export default ChatMessage;
