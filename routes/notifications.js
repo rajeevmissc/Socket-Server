@@ -266,7 +266,7 @@
 import express from 'express';
 import webpush from 'web-push';
 import { authenticateToken } from '../middleware/authMiddleware.js';
-import { emitToUser, emitToChannel, isUserOnline } from '../socket/server-socket-handler.js';
+import { emitToUser, emitToChannel, isUserOnline } from '../config/socket.js';
 
 const router = express.Router();
 
@@ -627,3 +627,4 @@ router.get('/channel-users/:channelName', authenticateToken, async (req, res) =>
 });
 
 export default router;
+
