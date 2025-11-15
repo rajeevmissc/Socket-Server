@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "cleanup": "node -e \"require('axios').post(process.env.API_URL + '/api/notifications/cleanup-expired', {}, {headers: {'Authorization': 'Bearer ' + process.env.CLEANUP_SECRET}})\""
   },
   "keywords": [],
   "author": "",
