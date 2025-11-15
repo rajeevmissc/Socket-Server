@@ -809,7 +809,7 @@
 import express from 'express';
 import webpush from 'web-push';
 import { createClient } from 'redis';
-import { getIo, getRoomInfo } from '../socket/socket.js'; // Import from your socket file
+import { getIo, getRoomInfo } from '../config/socket.js'; // Import from your socket file
 
 const router = express.Router();
 
@@ -1458,3 +1458,4 @@ process.on('SIGTERM', async () => {
 });
 
 export default router;
+
