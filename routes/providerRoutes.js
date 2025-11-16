@@ -29,6 +29,64 @@ const providerValidation = [
   body('businessInfo.serviceAreas').isArray({ min: 1 }).withMessage('At least one service area is required')
 ];
 
+
+
+// Add this to your existing providerRoutes.js
+
+// Get presence status for all providers
+router.get('/presence', async (req, res) => {
+  try {
+    const providers = await Provider.find(
+      {}, 
+      { 
+        _id: 1, 
+        'presence.isOnline': 1, 
+        'presence.availabilityStatus': 1 
+      }
+    );
+
+    const presenceMap = {};
+    providers.forEach(provider => {
+      presenceMap[provider._id.toString()] = {
+        isOnline: provider.presence?.isOnline || false,
+        status: provider.presence?.availabilityStatus || 'offline'
+      };
+    });
+
+    res.json({ success: true, presence: presenceMap });
+  } catch (error) {
+    console.error('Error fetching presence:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update provider status
+router.post('/update-status', async (req, res) => {
+  try {
+    const { providerId, status } = req.body;
+
+    if (!providerId || !status) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'ProviderId and status are required' 
+      });
+    }
+
+    const isOnline = status === 'online';
+
+    await Provider.findByIdAndUpdate(providerId, {
+      'presence.isOnline': isOnline,
+      'presence.availabilityStatus': status,
+      'presence.lastSeen': new Date()
+    });
+
+    res.json({ success: true, message: 'Status updated successfully' });
+  } catch (error) {
+    console.error('Error updating status:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Routes - Only 5 essential endpoints
 router.post('/', providerValidation, createProvider);        // Create provider
 router.get('/', getAllProviders);                             // Get all with filters
@@ -37,3 +95,4 @@ router.put('/:id', updateProvider);                           // Update provider
 router.delete('/:id', deleteProvider);                        // Delete provider
 
 export default router;
+
