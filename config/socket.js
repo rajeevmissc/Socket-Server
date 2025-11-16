@@ -15,16 +15,32 @@ export const initSocket = (server) => {
     console.log('New client connected', socket.id);
 
     // Provider updates presence
-   socket.on('updatePresence', async ({ providerId, isOnline }) => {
-  const status = isOnline ? 'online' : 'offline';
-  await Provider.findByIdAndUpdate(providerId, {
-    'presence.isOnline': isOnline,
-    'presence.availabilityStatus': status,
-    'presence.lastSeen': new Date()
-  });
+   socket.on("updatePresence", async ({ providerId, isOnline }) => {
+  try {
+    console.log("Received updatePresence:", providerId, isOnline);
 
-  io.emit('presenceChanged', { providerId, isOnline, status });
+    const status = isOnline ? "online" : "offline";
+
+    const result = await Provider.findByIdAndUpdate(
+      providerId,
+      {
+        $set: {
+          "presence.isOnline": isOnline,
+          "presence.availabilityStatus": status,
+          "presence.lastSeen": new Date()
+        }
+      },
+      { new: true }
+    );
+
+    console.log("DB Updated Provider:", result);
+
+    io.emit("presenceChanged", { providerId, isOnline, status });
+  } catch (err) {
+    console.error("Error updating presence", err);
+  }
 });
+
 
 
     socket.on('disconnect', () => {
@@ -39,5 +55,6 @@ export const getIo = () => {
   if (!io) throw new Error('Socket.io not initialized!');
   return io;
 };
+
 
 
