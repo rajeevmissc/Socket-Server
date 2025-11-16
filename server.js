@@ -448,22 +448,21 @@ import dotenv from 'dotenv';
 import agoraRoutes from './routes/agora.js';
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+// Wallet module routes
 import walletRoutes from './routes/wallet.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
 import transactionRoutes from './routes/transaction.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import testimonialRoutes from './routes/testimonialRoutes.js';
+import { errorHandler, notFoundHandler } from './middleware/errorMiddleware.js';
+import { rateLimiter } from './middleware/rateLimitMiddleware.js';
+import { authenticateToken } from './middleware/authMiddleware.js';
 import slotRoutes from './routes/slot.routes.js';
 import bookingRoutes from './routes/booking.routes.js';
 import providerRoutes from './routes/providerRoutes.js';
 import feedbackRoutes from './routes/feedbackRoutes.js';
+import notificationRoutes from './routes/notifications.js';
 import verificationRoutes from './routes/verification.routes.js';
-
-// Middlewares
-import { errorHandler, notFoundHandler } from './middleware/errorMiddleware.js';
-import { rateLimiter } from './middleware/rateLimitMiddleware.js';
-import { authenticateToken } from './middleware/authMiddleware.js';
-
 import Provider from './models/Provider.js';
 
 dotenv.config();
@@ -616,30 +615,26 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// ------------------ API Routes ------------------
 // Public routes
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/agora', agoraRoutes);
 app.use('/api/notifications', notificationRoutes);
-app.use('/api/testimonials', testimonialRoutes);
-app.use('/api/providers', providerRoutes);
-app.use('/api/feedback', feedbackRoutes);
-
-// Auth-protected
-app.use('/api/wallet', authenticateToken, walletRoutes);
-app.use('/api/payments', authenticateToken, paymentRoutes);
-app.use('/api/transactions', authenticateToken, transactionRoutes);
-
+// Wallet module routes with authentication
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/slots', slotRoutes);
-
-// Webhooks
+app.use('/api/wallet', authenticateToken, walletRoutes);
+app.use('/api/payments', authenticateToken, paymentRoutes);
+app.use('/api/transactions', authenticateToken, transactionRoutes);
+app.use('/api/testimonials', testimonialRoutes);
+app.use('/api/providers', providerRoutes);
+// Webhooks (no auth required)
 app.use('/api/webhooks', webhookRoutes);
+app.use('/api/feedback', feedbackRoutes);
 
-/* ------------------------------------------------------
-    ERROR HANDLERS
--------------------------------------------------------*/
+// ------------------ Error Handling ------------------
 app.use(notFoundHandler);
 app.use(errorHandler);
 
