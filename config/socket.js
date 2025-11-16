@@ -15,21 +15,17 @@ export const initSocket = (server) => {
     console.log('New client connected', socket.id);
 
     // Provider updates presence
-    socket.on('updatePresence', async ({ providerId, isOnline }) => {
-      try {
-        const status = isOnline ? 'online' : 'offline';
-        await Provider.findByIdAndUpdate(providerId, {
-          'presence.isOnline': isOnline,
-          'presence.availabilityStatus': status,
-          'presence.lastSeen': new Date()
-        });
+   socket.on('updatePresence', async ({ providerId, isOnline }) => {
+  const status = isOnline ? 'online' : 'offline';
+  await Provider.findByIdAndUpdate(providerId, {
+    'presence.isOnline': isOnline,
+    'presence.availabilityStatus': status,
+    'presence.lastSeen': new Date()
+  });
 
-        // Broadcast to all clients
-        io.emit('presenceChanged', { providerId, isOnline, status });
-      } catch (err) {
-        console.error('Error updating presence', err);
-      }
-    });
+  io.emit('presenceChanged', { providerId, isOnline, status });
+});
+
 
     socket.on('disconnect', () => {
       console.log('Client disconnected', socket.id);
@@ -43,4 +39,5 @@ export const getIo = () => {
   if (!io) throw new Error('Socket.io not initialized!');
   return io;
 };
+
 
