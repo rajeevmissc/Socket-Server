@@ -7,7 +7,7 @@ import {
   updateProvider,
   deleteProvider
 } from '../controllers/providerController.js';
-
+import Provider from '../models/Provider.js';
 const router = express.Router();
 
 // Validation middleware for creating provider
@@ -95,4 +95,5 @@ router.put('/:id', updateProvider);                           // Update provider
 router.delete('/:id', deleteProvider);                        // Delete provider
 
 export default router;
+
 
