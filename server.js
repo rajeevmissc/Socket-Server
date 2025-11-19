@@ -538,6 +538,22 @@ io.on('connection', (socket) => {
     }
   });
 
+
+socket.on('switch-call-type', async (data) => {
+  console.log('🔄 Call type switch requested:', data);
+  
+  const { channelName, newCallType, userId, providerId } = data;
+  
+  // Emit to all users in the channel (especially the provider)
+  io.to(channelName).emit('call-type-switch', {
+    channelName,
+    newCallType,
+    callId: channelName
+  });
+  
+  console.log(`✅ Notified all users in ${channelName} about switch to ${newCallType}`);
+});
+    
   /* ------------------------------
       4️⃣ When Provider Disconnects
   ------------------------------*/
