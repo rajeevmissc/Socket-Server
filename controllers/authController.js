@@ -83,7 +83,7 @@ if (!user) {
   // Prevent frequent OTP requests (spam control)
   const recentOTP = await OTP.findOne({
     phoneNumber: fullPhoneNumber,
-    createdAt: { $gt: new Date(Date.now() - 60000) } // last 1 min
+    createdAt: { $gt: new Date(Date.now() - 29000) } // last 1 min
   });
 
   if (recentOTP) {
@@ -369,6 +369,7 @@ export {
   logoutController,
   logoutAllController
 };
+
 
 
 
