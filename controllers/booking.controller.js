@@ -306,6 +306,30 @@ createBooking: async (req, res) => {
     }
   },
 
+// Get latest booking of the user
+getLatestUserBooking: async (req, res) => {
+  try {
+    const userId = req.user._id;
+
+    const latestBooking = await Booking.findOne({ userId })
+      .sort({ createdAt: -1 })
+      .populate('providerId', 'name email phone');
+
+    res.json({
+      success: true,
+      data: latestBooking
+    });
+
+  } catch (error) {
+    console.error('Latest user booking error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch latest user booking',
+      error: error.message
+    });
+  }
+},
+  
   // Get provider bookings (NEW)
   getProviderBookings: async (req, res) => {
     try {
@@ -344,6 +368,37 @@ createBooking: async (req, res) => {
       });
     }
   },
+
+  // Get latest booking of provider
+getLatestProviderBooking: async (req, res) => {
+  try {
+    const providerId = req.user.providerId;
+
+    const latestBooking = await Booking.findOne({ providerId })
+      .sort({ createdAt: -1 })
+      .populate('userId', 'name email phone');
+
+    const modified = latestBooking
+      ? {
+          ...latestBooking.toObject(),
+          userName: latestBooking.userId?.name || "Unknown User"
+        }
+      : null;
+
+    res.json({
+      success: true,
+      data: modified
+    });
+
+  } catch (error) {
+    console.error('Latest provider booking error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch latest provider booking',
+      error: error.message
+    });
+  }
+}
 
   // Get all bookings (admin)
   getAllBookings: async (req, res) => {
@@ -567,6 +622,7 @@ createBooking: async (req, res) => {
 };
 
 export default bookingController;
+
 
 
 
