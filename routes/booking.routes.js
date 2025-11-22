@@ -19,10 +19,24 @@ router.get('/user',
   bookingController.getUserBookings
 );
 
+// Get latest user booking
+router.get(
+  '/user/latest',
+  authMiddleware,
+  bookingController.getLatestUserBooking
+);
+
 // Get provider's bookings (NEW)
 router.get('/provider',
   bookingController.checkProvider,
   bookingController.getProviderBookings
+);
+
+//Get provider latset booking
+router.get(
+  '/provider/latest',
+  bookingController.checkProvider,
+  bookingController.getLatestProviderBooking
 );
 
 // Get all bookings (admin only)
@@ -40,5 +54,6 @@ router.patch('/:bookingId/status',
 router.delete('/:bookingId',
   bookingController.cancelBooking
 );
+
 
 export default router;
