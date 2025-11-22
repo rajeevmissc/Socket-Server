@@ -398,7 +398,7 @@ getLatestProviderBooking: async (req, res) => {
       error: error.message
     });
   }
-}
+},
 
   // Get all bookings (admin)
   getAllBookings: async (req, res) => {
@@ -622,6 +622,7 @@ getLatestProviderBooking: async (req, res) => {
 };
 
 export default bookingController;
+
 
 
 
