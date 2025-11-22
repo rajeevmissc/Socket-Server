@@ -22,7 +22,6 @@ router.get('/user',
 // Get latest user booking
 router.get(
   '/user/latest',
-  authMiddleware,
   bookingController.getLatestUserBooking
 );
 
@@ -57,3 +56,4 @@ router.delete('/:bookingId',
 
 
 export default router;
+
