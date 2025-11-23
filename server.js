@@ -477,7 +477,7 @@ const io = new Server(httpServer, {
   cors: {
     origin: process.env.FRONTEND_URL || 'https://socket-server-d9ts.onrender.com',
     credentials: true,
-    methods: ['GET', 'POST']
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
   },
   transports: ['websocket', 'polling']
 });
