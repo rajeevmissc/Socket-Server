@@ -30,10 +30,11 @@ router.post(
 );
 
 // GET VERIFICATION
-router.get('/booking/:bookingId', authenticateToken, verificationController.getVerificationByBooking);
+router.get('/:bookingId', authenticateToken, verificationController.getVerificationByBooking);
 
 // Cloudinary serves files — no local file route needed
-router.get('/file/:verificationId/:fileType', verificationController.getVerificationFile);
+router.get('/:verificationId/:fileType', verificationController.getVerificationFile);
 
 export default router;
+
 
