@@ -475,7 +475,7 @@ const httpServer = createServer(app);
 -------------------------------------------------------*/
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'https://videocall-theta-pearl.vercel.app',
+    origin: process.env.FRONTEND_URL || 'https://socket-server-d9ts.onrender.com',
     credentials: true,
     methods: ['GET', 'POST']
   },
