@@ -762,19 +762,6 @@
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 import express from 'express';
 import webpush from 'web-push';
 import { createClient } from 'redis';
@@ -815,7 +802,6 @@ const storage = {
         300, // 5 minutes TTL
         JSON.stringify(callData)
       );
-      await redisClient.sAdd(`provider:${callData.providerId}:calls`, callId);
     } else {
       memoryStorage.activeCallNotifications.set(callId, callData);
     }
@@ -831,26 +817,10 @@ const storage = {
 
   async deleteCall(callId) {
     if (USE_REDIS && redisClient?.isOpen) {
-      const callData = await this.getCall(callId);
-      if (callData) {
-        await redisClient.sRem(`provider:${callData.providerId}:calls`, callId);
-      }
       await redisClient.del(`call:${callId}`);
     } else {
       memoryStorage.activeCallNotifications.delete(callId);
     }
-  },
-
-  async getProviderCalls(providerId) {
-    if (USE_REDIS && redisClient?.isOpen) {
-      const callIds = await redisClient.sMembers(`provider:${providerId}:calls`);
-      const calls = await Promise.all(
-        callIds.map(id => this.getCall(id))
-      );
-      return calls.filter(Boolean).filter(call => call.status === 'waiting');
-    }
-    return Array.from(memoryStorage.activeCallNotifications.values())
-      .filter(call => call.providerId === providerId && call.status === 'waiting');
   },
 
   async setPushSubscription(providerId, subscription) {
@@ -917,10 +887,10 @@ router.post('/subscribe-push', async (req, res) => {
   }
 });
 
-// ✅ Notify provider about incoming call (Real-time via Socket.IO)
+// ✅ Notify provider about incoming call (Real-time via Socket.IO ONLY)
 router.post('/notify-call', async (req, res) => {
   try {
-    const { providerId, channelName, callerName, mode, callType, callerAvatar } = req.body;
+    const { providerId, channelName, callerName, mode, callType, callerAvatar, userId } = req.body;
 
     if (!providerId || !channelName || !callerName) {
       return res.status(400).json({
@@ -929,53 +899,54 @@ router.post('/notify-call', async (req, res) => {
       });
     }
 
+    const callId = `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
     const callData = {
-      callId: `call_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      callId,
       providerId,
+      userId,
       channelName,
       callerName,
       callerAvatar: callerAvatar || null,
       mode: mode || 'audio',
       callType: callType || 'regular',
       timestamp: new Date().toISOString(),
-      status: 'waiting',
-      expiresAt: Date.now() + 60000 // 60 seconds timeout
+      expiresAt: Date.now() + 60000 // 60 seconds
     };
 
-    // Store the call notification
-    await storage.setCall(callData.callId, callData);
-
-    console.log('📞 Call notification created:', {
-      callId: callData.callId,
-      providerId,
-      callerName,
-      mode,
-      channelName
-    });
-
-    // Get Socket.IO instance and connected providers
+    // Get Socket.IO instance
     const io = req.app.get('io');
     const connectedProviders = req.app.get('connectedProviders');
+    const busyProviders = req.app.get('busyProviders') || new Map();
 
-    let deliveryMethod = 'none';
-    let notificationSent = false;
-
-    // ✅ Check if provider is connected via Socket.IO
+    // ✅ Check if provider is connected
     const providerSocketId = connectedProviders?.get(providerId);
     
-    if (providerSocketId && io) {
-      try {
-        // Send real-time notification via Socket.IO
-        io.to(providerSocketId).emit('incoming-call', callData);
-        console.log(`✅ Real-time notification sent to provider ${providerId} via Socket.IO`);
-        deliveryMethod = 'realtime';
-        notificationSent = true;
-      } catch (socketError) {
-        console.error('Socket.IO error:', socketError);
-      }
-    } else {
-      console.log(`⚠️ Provider ${providerId} not connected via Socket.IO`);
+    if (!providerSocketId || !io) {
+      console.log(`⚠️ Provider ${providerId} is offline`);
+      return res.status(200).json({
+        success: false,
+        message: 'Provider is offline',
+        status: 'offline'
+      });
     }
+
+    // ✅ Check if provider is busy (already in a call)
+    if (busyProviders.has(providerId)) {
+      console.log(`⚠️ Provider ${providerId} is busy`);
+      return res.status(200).json({
+        success: false,
+        message: 'Provider is busy in another call',
+        status: 'busy'
+      });
+    }
+
+    // ✅ Store temporary call reference for cleanup
+    await storage.setCall(callId, callData);
+
+    // ✅ Send SINGLE call notification to provider ONLY
+    io.to(providerSocketId).emit('incoming-call', callData);
+    console.log(`✅ Call notification sent to provider ${providerId} (Socket: ${providerSocketId})`);
 
     // ✅ Also send push notification if provider has subscribed (fallback)
     const subscription = await storage.getPushSubscription(providerId);
@@ -988,65 +959,54 @@ router.post('/notify-call', async (req, res) => {
             body: `${callerName} is calling you`,
             icon: '/icon-192x192.png',
             badge: '/badge-72x72.png',
-            tag: callData.callId,
+            tag: callId,
             data: callData,
             requireInteraction: true,
             vibrate: mode === 'chat' ? [100, 100] : [200, 100, 200],
-            actions: [
-              { action: 'accept', title: 'Accept' },
-              { action: 'decline', title: 'Decline' }
-            ]
           })
         );
         console.log(`📱 Push notification sent to provider ${providerId}`);
-        if (deliveryMethod === 'none') deliveryMethod = 'push';
-        notificationSent = true;
       } catch (pushError) {
         console.error('Push notification error:', pushError);
-        // Remove invalid subscription
         if (pushError.statusCode === 410 || pushError.statusCode === 404) {
           await storage.deletePushSubscription(providerId);
         }
       }
     }
 
-    // ✅ Auto-cleanup after expiration
+    // ✅ Auto-expire after 60 seconds
     setTimeout(async () => {
-      const call = await storage.getCall(callData.callId);
-      if (call && call.status === 'waiting') {
-        await storage.deleteCall(callData.callId);
+      const call = await storage.getCall(callId);
+      
+      if (call) {
+        // Call was never answered - notify both parties
+        await storage.deleteCall(callId);
         
-        // Emit call-expired event to BOTH provider AND to the channel
         if (io) {
-          // To provider
-          if (providerSocketId) {
-            io.to(providerSocketId).emit('call-expired', { 
-              callId: callData.callId, 
-              providerId,
-              channelName: callData.channelName
-            });
-          }
-          
-          // To all clients (so caller can receive it)
-          io.emit('call-expired', {
-            callId: callData.callId,
-            channelName: callData.channelName,
-            providerId
+          // Notify provider to remove notification
+          io.to(providerSocketId).emit('call-expired', { 
+            callId,
+            channelName 
           });
+          
+          // Notify user that call was not answered
+          io.emit('call-no-answer', {
+            callId,
+            channelName,
+            providerId,
+            reason: 'Provider did not answer'
+          });
+          
+          console.log(`⏰ Call ${callId} expired - provider did not respond`);
         }
-        
-        console.log(`⏰ Call ${callData.callId} expired and removed`);
       }
     }, 60000);
 
     res.status(200).json({
       success: true,
-      callId: callData.callId,
-      message: notificationSent 
-        ? 'Provider notified about incoming call' 
-        : 'Call notification created but provider not reachable',
-      deliveryMethod,
-      notificationSent
+      callId,
+      message: 'Call notification sent to provider',
+      status: 'ringing'
     });
 
   } catch (error) {
@@ -1059,7 +1019,7 @@ router.post('/notify-call', async (req, res) => {
   }
 });
 
-// ✅ Accept call (Real-time notification via Socket.IO)
+// ✅ Accept call - Mark provider as BUSY
 router.post('/accept-call/:callId', async (req, res) => {
   try {
     const { callId } = req.params;
@@ -1072,36 +1032,32 @@ router.post('/accept-call/:callId', async (req, res) => {
       });
     }
 
-    // Prevent double-acceptance
-    if (callData.status !== 'waiting') {
-      return res.status(400).json({
-        success: false,
-        error: `Call already ${callData.status}`
-      });
-    }
-
-    // Update call status
-    callData.status = 'accepted';
-    callData.acceptedAt = new Date().toISOString();
-    await storage.setCall(callId, callData);
-
-    // ✅ Notify via Socket.IO to ALL clients (especially the caller)
     const io = req.app.get('io');
+    const busyProviders = req.app.get('busyProviders') || new Map();
+
+    // ✅ Mark provider as BUSY
+    busyProviders.set(callData.providerId, {
+      callId,
+      channelName: callData.channelName,
+      startedAt: Date.now()
+    });
+    req.app.set('busyProviders', busyProviders);
+
+    console.log(`✅ Provider ${callData.providerId} marked as BUSY (Call: ${callId})`);
+
+    // ✅ Notify caller that call was accepted
     if (io) {
       io.emit('call-accepted', { 
         callId, 
         providerId: callData.providerId,
         channelName: callData.channelName,
-        callerName: callData.callerName,
         mode: callData.mode
       });
       console.log(`✅ Call-accepted event broadcasted for call ${callId}`);
     }
 
-    console.log(`✅ Call ${callId} accepted by provider ${callData.providerId}`);
-
-    // Clean up after 30 seconds
-    setTimeout(() => storage.deleteCall(callId), 30000);
+    // Remove from storage
+    await storage.deleteCall(callId);
 
     res.status(200).json({
       success: true,
@@ -1119,7 +1075,7 @@ router.post('/accept-call/:callId', async (req, res) => {
   }
 });
 
-// ✅ Decline call (Real-time notification via Socket.IO) - FIXED
+// ✅ Decline call - Remove notification immediately
 router.post('/decline-call/:callId', async (req, res) => {
   try {
     const { callId } = req.params;
@@ -1132,38 +1088,21 @@ router.post('/decline-call/:callId', async (req, res) => {
       });
     }
 
-    // Prevent double-decline
-    if (callData.status !== 'waiting') {
-      return res.status(400).json({
-        success: false,
-        error: `Call already ${callData.status}`
-      });
-    }
-
-    // Update call status
-    callData.status = 'declined';
-    callData.declinedAt = new Date().toISOString();
-    await storage.setCall(callId, callData);
-
-    // ✅ Notify via Socket.IO to ALL clients (especially the caller)
     const io = req.app.get('io');
+
+    // ✅ Immediately notify caller that call was declined
     if (io) {
-      // Broadcast to everyone
       io.emit('call-declined', { 
         callId, 
         providerId: callData.providerId,
-        channelName: callData.channelName,  // ✅ Added channelName
-        callerName: callData.callerName,
-        mode: callData.mode,
-        reason: 'Provider declined the call'  // ✅ Added reason
+        channelName: callData.channelName,
+        reason: 'Provider declined the call'
       });
-      console.log(`📢 Call-declined event broadcasted for call ${callId} on channel ${callData.channelName}`);
+      console.log(`❌ Call ${callId} declined by provider ${callData.providerId}`);
     }
 
-    console.log(`❌ Call ${callId} declined by provider ${callData.providerId}`);
-
-    // Remove from active calls immediately
-    setTimeout(() => storage.deleteCall(callId), 2000);
+    // Remove from storage immediately
+    await storage.deleteCall(callId);
 
     res.status(200).json({
       success: true,
@@ -1181,34 +1120,30 @@ router.post('/decline-call/:callId', async (req, res) => {
   }
 });
 
-// ✅ End/Cancel call (Real-time notification via Socket.IO)
+// ✅ End call - Remove provider from BUSY state
 router.post('/end-call/:callId', async (req, res) => {
   try {
     const { callId } = req.params;
-    const callData = await storage.getCall(callId);
+    const { providerId, channelName } = req.body;
 
-    if (callData) {
-      // Update status
-      callData.status = 'ended';
-      callData.endedAt = new Date().toISOString();
-      await storage.setCall(callId, callData);
+    const io = req.app.get('io');
+    const busyProviders = req.app.get('busyProviders') || new Map();
 
-      // ✅ Notify via Socket.IO to ALL clients
-      const io = req.app.get('io');
-      if (io) {
-        io.emit('call-ended', { 
-          callId, 
-          providerId: callData.providerId,
-          channelName: callData.channelName,  // ✅ Added channelName
-          callerName: callData.callerName,
-          mode: callData.mode
-        });
-        console.log(`📢 Call-ended event broadcasted for call ${callId}`);
-      }
-      
-      // Delete after broadcast
-      setTimeout(() => storage.deleteCall(callId), 2000);
-      console.log(`📞 Call ${callId} ended and will be cleaned up`);
+    // ✅ Remove provider from busy state
+    if (providerId && busyProviders.has(providerId)) {
+      busyProviders.delete(providerId);
+      req.app.set('busyProviders', busyProviders);
+      console.log(`✅ Provider ${providerId} marked as AVAILABLE again`);
+    }
+
+    // ✅ Notify all participants
+    if (io) {
+      io.emit('call-ended', { 
+        callId, 
+        providerId,
+        channelName
+      });
+      console.log(`📢 Call ${callId} ended`);
     }
 
     res.status(200).json({
@@ -1226,68 +1161,44 @@ router.post('/end-call/:callId', async (req, res) => {
   }
 });
 
-// ✅ Get active calls for a provider (for initial load/recovery only)
-router.get('/active-calls/:providerId', async (req, res) => {
+// ✅ User cancels call before provider answers
+router.post('/cancel-call/:callId', async (req, res) => {
   try {
-    const { providerId } = req.params;
-    
-    const pendingCalls = await storage.getProviderCalls(providerId);
-    
-    // Filter out expired calls
-    const activeCalls = pendingCalls.filter(call => {
-      if (call.expiresAt && Date.now() > call.expiresAt) {
-        storage.deleteCall(call.callId); // Clean up expired
-        return false;
+    const { callId } = req.params;
+    const callData = await storage.getCall(callId);
+
+    if (callData) {
+      const io = req.app.get('io');
+      const connectedProviders = req.app.get('connectedProviders');
+      const providerSocketId = connectedProviders?.get(callData.providerId);
+
+      // ✅ Notify provider to remove notification
+      if (io && providerSocketId) {
+        io.to(providerSocketId).emit('call-cancelled', { 
+          callId,
+          channelName: callData.channelName,
+          reason: 'User cancelled the call'
+        });
+        console.log(`📞 Call ${callId} cancelled by user`);
       }
-      return true;
-    });
 
-    res.status(200).json({
-      success: true,
-      activeCalls: activeCalls.sort((a, b) => 
-        new Date(b.timestamp) - new Date(a.timestamp)
-      )
-    });
-
-  } catch (error) {
-    console.error('Error fetching active calls:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to fetch active calls',
-      details: error.message 
-    });
-  }
-});
-
-// ✅ Health check endpoint
-router.get('/health', async (req, res) => {
-  try {
-    const redisStatus = USE_REDIS && redisClient?.isOpen ? 'connected' : 'not-configured';
-    
-    let activeCallCount = 0;
-    if (USE_REDIS && redisClient?.isOpen) {
-      const keys = await redisClient.keys('call:*');
-      activeCallCount = keys.length;
-    } else {
-      activeCallCount = memoryStorage.activeCallNotifications.size;
+      await storage.deleteCall(callId);
     }
 
     res.status(200).json({
       success: true,
-      status: 'healthy',
-      redis: redisStatus,
-      activeCallsCount: activeCallCount,
-      timestamp: new Date().toISOString()
+      message: 'Call cancelled successfully'
     });
+
   } catch (error) {
-    res.status(500).json({
-      success: false,
-      status: 'unhealthy',
-      error: error.message
+    console.error('Error cancelling call:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to cancel call',
+      details: error.message 
     });
   }
 });
-
 
 // ✅ Upgrade chat to audio/video call
 router.post('/upgrade-chat-to-call/:channelName', async (req, res) => {
@@ -1398,51 +1309,34 @@ router.post('/end-chat/:channelName', async (req, res) => {
   }
 });
 
-// ✅ Auto-decline call (2 minutes timeout)
-router.post('/auto-decline-call/:channelName', async (req, res) => {
+// ✅ Health check endpoint
+router.get('/health', async (req, res) => {
   try {
-    const { channelName } = req.params;
-    const { reason, callType, waitingTime } = req.body;
-
-    console.log(`⏰ Auto-declining call for channel: ${channelName}`, {
-      reason,
-      callType,
-      waitingTime
-    });
-
-    if (!channelName) {
-      return res.status(400).json({
-        success: false,
-        error: 'Missing channelName'
-      });
+    const redisStatus = USE_REDIS && redisClient?.isOpen ? 'connected' : 'not-configured';
+    
+    let activeCallCount = 0;
+    if (USE_REDIS && redisClient?.isOpen) {
+      const keys = await redisClient.keys('call:*');
+      activeCallCount = keys.length;
+    } else {
+      activeCallCount = memoryStorage.activeCallNotifications.size;
     }
 
-    const io = req.app.get('io');
-
-    if (io) {
-      io.emit('call-auto-declined', {
-        channelName: channelName,
-        reason: reason || 'Provider did not respond within 2 minutes',
-        callType,
-        waitingTime,
-        timestamp: new Date().toISOString()
-      });
-
-      console.log(`📡 Auto-decline notification broadcasted for channel ${channelName}`);
-    }
+    const busyProviders = req.app.get('busyProviders') || new Map();
 
     res.status(200).json({
       success: true,
-      message: 'Call auto-declined successfully',
-      reason
+      status: 'healthy',
+      redis: redisStatus,
+      activeCallsCount: activeCallCount,
+      busyProvidersCount: busyProviders.size,
+      timestamp: new Date().toISOString()
     });
-
   } catch (error) {
-    console.error('Error auto-declining call:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to auto-decline call',
-      details: error.message 
+    res.status(500).json({
+      success: false,
+      status: 'unhealthy',
+      error: error.message
     });
   }
 });
@@ -1467,12 +1361,6 @@ router.post('/cleanup-expired', async (req, res) => {
           const call = JSON.parse(data);
           if (call.expiresAt && Date.now() > call.expiresAt) {
             await redisClient.del(key);
-            
-            // Also remove from provider's call set
-            if (call.providerId) {
-              await redisClient.sRem(`provider:${call.providerId}:calls`, call.callId);
-            }
-            
             cleanedCount++;
           }
         }
@@ -1528,15 +1416,3 @@ process.on('SIGINT', async () => {
 });
 
 export default router;
-
-
-
-
-
-
-
-
-
-
-
-
