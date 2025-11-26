@@ -164,15 +164,16 @@ const providerSchema = new mongoose.Schema({
     serviceAreas: [{ type: String, required: true }]
   },
 
-  presence: {
-    isOnline: { type: Boolean, default: false },
-    availabilityStatus: {
-      type: String,
-      enum: ['online', 'offline', 'recently_active'],
-      default: 'offline'
-    },
-    lastSeen: { type: Date, default: null }
+ presence: {
+  isOnline: { type: Boolean, default: false },
+  availabilityStatus: {
+    type: String,
+    enum: ['online', 'offline', 'recently_active', 'busy', 'available'],
+    default: 'offline'
   },
+  lastSeen: { type: Date, default: null }
+}
+
   
   socialProof: {
     badges: [{ type: String }],
@@ -221,6 +222,7 @@ providerSchema.pre('save', function(next) {
 const Provider = mongoose.model('Provider', providerSchema);
 
 export default Provider;
+
 
 
 
