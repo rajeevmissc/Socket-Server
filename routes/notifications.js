@@ -911,7 +911,7 @@ router.post('/notify-call', async (req, res) => {
       mode: mode || 'audio',
       callType: callType || 'regular',
       timestamp: new Date().toISOString(),
-      expiresAt: Date.now() + 60000 // 60 seconds
+      expiresAt: Date.now() + 120000 // 120 seconds
     };
 
     // Get Socket.IO instance
@@ -1000,7 +1000,7 @@ router.post('/notify-call', async (req, res) => {
           console.log(`⏰ Call ${callId} expired - provider did not respond`);
         }
       }
-    }, 60000);
+    }, 120000);
 
     res.status(200).json({
       success: true,
@@ -1416,3 +1416,4 @@ process.on('SIGINT', async () => {
 });
 
 export default router;
+
