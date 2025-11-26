@@ -310,82 +310,141 @@ io.on('connection', (socket) => {
   /* ------------------------------
       1️⃣ Provider Registers
   ------------------------------*/
-  socket.on('register-provider', (providerId) => {
-    if (!providerId) return;
+  socket.on('register-provider', async (providerId) => {
+    try {
+      if (!providerId) return;
 
-    connectedProviders.set(providerId, socket.id);
-    console.log(`🟢 Provider Registered → ${providerId} | Socket = ${socket.id}`);
+      connectedProviders.set(providerId, socket.id);
+      console.log(`🟢 Provider Registered → ${providerId} | Socket = ${socket.id}`);
 
-    io.emit("providerOnline", { providerId });
+      // Mark provider ONLINE in DB
+      await Provider.findByIdAndUpdate(providerId, {
+        'presence.isOnline': true,
+        'presence.availabilityStatus': 'online',
+        'presence.lastSeen': new Date()
+      });
+
+      // Broadcast unified presenceChanged
+      io.emit('presenceChanged', {
+        providerId,
+        isOnline: true,
+        status: 'online'
+      });
+
+      // Legacy event kept for compatibility
+      io.emit('providerOnline', { providerId });
+    } catch (err) {
+      console.error('❌ Error in register-provider:', err);
+    }
   });
 
   /* ------------------------------
       2️⃣ Presence Update (Online/Offline)
   ------------------------------*/
   socket.on('updatePresence', async ({ providerId, isOnline }) => {
-    if (!providerId) return;
+    try {
+      if (!providerId) return;
 
-    const status = isOnline ? "online" : "offline";
+      const status = isOnline ? 'online' : 'offline';
 
-    await Provider.findByIdAndUpdate(providerId, {
-      "presence.isOnline": isOnline,
-      "presence.availabilityStatus": status,
-      "presence.lastSeen": new Date()
-    });
+      await Provider.findByIdAndUpdate(providerId, {
+        'presence.isOnline': isOnline,
+        'presence.availabilityStatus': status,
+        'presence.lastSeen': new Date()
+      });
 
-    console.log(`📌 Presence Updated → ${providerId}: ${status}`);
+      console.log(`📌 Presence Updated → ${providerId}: ${status}`);
 
-    io.emit("presenceChanged", {
-      providerId,
-      isOnline,
-      status
-    });
+      io.emit('presenceChanged', {
+        providerId,
+        isOnline,
+        status
+      });
+    } catch (err) {
+      console.error('❌ Error in updatePresence:', err);
+    }
   });
 
   /* ------------------------------
       2️⃣B Provider BUSY (during call)
   ------------------------------*/
-  socket.on("provider-busy", async ({ providerId }) => {
-    if (!providerId) return;
+  socket.on('provider-busy', async ({ providerId }) => {
+    try {
+      if (!providerId) return;
 
-    console.log(`🚨 Provider Busy → ${providerId}`);
+      console.log(`🚨 Provider Busy → ${providerId}`);
 
-    busyProviders.set(providerId, true);
+      busyProviders.set(providerId, true);
 
-    await Provider.findByIdAndUpdate(providerId, {
-      "presence.isOnline": true,
-      "presence.availabilityStatus": "busy",
-      "presence.lastSeen": new Date()
-    });
+      await Provider.findByIdAndUpdate(providerId, {
+        'presence.isOnline': true,
+        'presence.availabilityStatus': 'busy',
+        'presence.lastSeen': new Date()
+      });
 
-    io.emit("presenceChanged", {
-      providerId,
-      isOnline: true,
-      status: "busy"
-    });
+      io.emit('presenceChanged', {
+        providerId,
+        isOnline: true,
+        status: 'busy'
+      });
+    } catch (err) {
+      console.error('❌ Error in provider-busy:', err);
+    }
   });
 
   /* ------------------------------
       2️⃣C Provider AVAILABLE (after call ends)
   ------------------------------*/
-  socket.on("provider-available", async ({ providerId }) => {
-    if (!providerId) return;
+  socket.on('provider-available', async ({ providerId }) => {
+    try {
+      if (!providerId) return;
 
-    console.log(`🟢 Provider Available → ${providerId}`);
+      console.log(`🟢 Provider Available → ${providerId}`);
 
-    busyProviders.delete(providerId);
+      busyProviders.delete(providerId);
 
-    await Provider.findByIdAndUpdate(providerId, {
-      "presence.isOnline": true,
-      "presence.availabilityStatus": "available",
-      "presence.lastSeen": new Date()
-    });
+      await Provider.findByIdAndUpdate(providerId, {
+        'presence.isOnline': true,
+        'presence.availabilityStatus': 'available',
+        'presence.lastSeen': new Date()
+      });
 
-    io.emit("presenceChanged", {
-      providerId,
-      isOnline: true,
-      status: "available"
-    });
+      io.emit('presenceChanged', {
+        providerId,
+        isOnline: true,
+        status: 'available'
+      });
+    } catch (err) {
+      console.error('❌ Error in provider-available:', err);
+    }
+  });
+
+  /* ------------------------------
+      2️⃣D Call Ended → Normalize to available
+      (Only used if frontend emits "call-ended")
+  ------------------------------*/
+  socket.on('call-ended', async ({ providerId }) => {
+    try {
+      if (!providerId) return;
+
+      console.log(`📞 Call ended → marking provider available: ${providerId}`);
+
+      busyProviders.delete(providerId);
+
+      await Provider.findByIdAndUpdate(providerId, {
+        'presence.isOnline': true,
+        'presence.availabilityStatus': 'available',
+        'presence.lastSeen': new Date()
+      });
+
+      io.emit('presenceChanged', {
+        providerId,
+        isOnline: true,
+        status: 'available'
+      });
+    } catch (err) {
+      console.error('❌ Error in call-ended handler:', err);
+    }
   });
 
   /* ------------------------------
@@ -423,22 +482,33 @@ io.on('connection', (socket) => {
   /* ------------------------------
       5️⃣ Provider Disconnects
   ------------------------------*/
-  socket.on("disconnect", () => {
-    for (const [providerId, socketId] of connectedProviders.entries()) {
-      if (socketId === socket.id) {
-        connectedProviders.delete(providerId);
-        busyProviders.delete(providerId);
+  socket.on('disconnect', async () => {
+    try {
+      for (const [providerId, socketId] of connectedProviders.entries()) {
+        if (socketId === socket.id) {
+          connectedProviders.delete(providerId);
+          busyProviders.delete(providerId);
 
-        console.log(`🔴 Provider Disconnected → ${providerId}`);
+          console.log(`🔴 Provider Disconnected → ${providerId}`);
 
-        io.emit("presenceChanged", {
-          providerId,
-          isOnline: false,
-          status: "offline"
-        });
+          // Update DB as offline
+          await Provider.findByIdAndUpdate(providerId, {
+            'presence.isOnline': false,
+            'presence.availabilityStatus': 'offline',
+            'presence.lastSeen': new Date()
+          });
 
-        break;
+          io.emit('presenceChanged', {
+            providerId,
+            isOnline: false,
+            status: 'offline'
+          });
+
+          break;
+        }
       }
+    } catch (err) {
+      console.error('❌ Error in disconnect handler:', err);
     }
   });
 });
@@ -490,7 +560,7 @@ app.use(async (req, res, next) => {
 });
 
 /* ------------------------------------------------------
-    ROOT CHECK ROUTE (NEW)
+    ROOT CHECK ROUTE
 -------------------------------------------------------*/
 app.get('/', (req, res) => {
   res.send('🚀 Server is working fine!');
@@ -537,3 +607,4 @@ connectToDatabase().then(() => {
     console.log(`🚀 Server running on port ${PORT}`);
   });
 });
+
