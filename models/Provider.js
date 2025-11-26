@@ -172,9 +172,7 @@ const providerSchema = new mongoose.Schema({
     default: 'offline'
   },
   lastSeen: { type: Date, default: null }
-}
-
-  
+},
   socialProof: {
     badges: [{ type: String }],
     platformStats: {
@@ -222,6 +220,7 @@ providerSchema.pre('save', function(next) {
 const Provider = mongoose.model('Provider', providerSchema);
 
 export default Provider;
+
 
 
 
