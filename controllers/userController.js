@@ -137,6 +137,80 @@ const deleteAccountController = asyncHandler(async (req, res) => {
   });
 });
 
+
+// @desc    Advanced User List with filters, pagination, search & sorting
+// @route   GET /api/user/list
+// @access  Private (Admin recommended)
+const getUsersAdvancedController = asyncHandler(async (req, res) => {
+  let {
+    page = 1,
+    limit = 20,
+    role,
+    status,
+    search,
+    startDate,
+    endDate,
+    sort = "createdAt",
+    order = "desc",
+  } = req.query;
+
+  page = Number(page);
+  limit = Number(limit);
+
+  const query = { status: { $ne: "deleted" } };
+
+  // ------ ROLE FILTER ------
+  if (role) query.role = role;
+
+  // ------ STATUS FILTER ------
+  if (status) query.status = status; // active / blocked / pending etc.
+
+  // ------ DATE RANGE FILTER ------
+  if (startDate || endDate) {
+    query.createdAt = {};
+    if (startDate) query.createdAt.$gte = new Date(startDate);
+    if (endDate) query.createdAt.$lte = new Date(endDate);
+  }
+
+  // ------ SEARCH FILTER ------
+  if (search) {
+    query.$or = [
+      { "profile.name": { $regex: search, $options: "i" } },
+      { phone: { $regex: search, $options: "i" } },
+      { email: { $regex: search, $options: "i" } },
+    ];
+  }
+
+  // ------ SORTING ------
+  const sortOrder = order === "asc" ? 1 : -1;
+  const sortQuery = { [sort]: sortOrder };
+
+  // ------ PAGINATION ------
+  const skip = (page - 1) * limit;
+
+  const totalUsers = await User.countDocuments(query);
+
+  const users = await User.find(query)
+    .select("-__v -otp -otpExpires")
+    .sort(sortQuery)
+    .skip(skip)
+    .limit(limit);
+
+  res.status(200).json({
+    success: true,
+    page,
+    limit,
+    totalUsers,
+    totalPages: Math.ceil(totalUsers / limit),
+    data: {
+      users: users.map(u =>
+        u.toPublicJSON ? u.toPublicJSON() : u
+      ),
+    },
+  });
+});
+
+
 // @desc    Get user statistics
 // @route   GET /api/user/stats
 // @access  Private
@@ -168,5 +242,7 @@ export {
   getSessionsController,
   terminateSessionController,
   deleteAccountController,
-  getUserStatsController
+  getUserStatsController,
+  getUsersAdvancedController
 };
+
