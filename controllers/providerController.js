@@ -47,6 +47,30 @@ export const createProvider = async (req, res) => {
   }
 };
 
+
+
+export const getProvidersPersonalInfo = async (req, res) => {
+  try {
+    const providers = await Provider.find({}, { personalInfo: 1 }) // projection
+      .sort({ "personalInfo.firstName": 1 });
+
+    res.status(200).json({
+      success: true,
+      count: providers.length,
+      data: providers
+    });
+
+  } catch (error) {
+    console.error("Error fetching provider personal info:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching providers personal info",
+      error: error.message
+    });
+  }
+};
+
+
 // @desc    Get all providers with filters and pagination
 // @route   GET /api/providers
 // @access  Public
@@ -227,6 +251,7 @@ export const deleteProvider = async (req, res) => {
     });
   }
 };
+
 
 
 
