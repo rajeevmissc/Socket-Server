@@ -180,6 +180,126 @@ export const getTransactions = async (req, res) => {
   }
 };
 
+
+
+export const getAllTransactionsForProvider = async (req, res) => {
+  try {
+    // Allow only providers to access this API
+    if (req.user.role !== "provider") {
+      return res.status(403).json({
+        success: false,
+        error: "Only providers can access this transaction list."
+      });
+    }
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const type = req.query.type;
+    const status = req.query.status;
+    const category = req.query.category;
+    const serviceType = req.query.serviceType;
+    const startDate = req.query.startDate;
+    const endDate = req.query.endDate;
+
+    // Provider can see ALL transactions (same as admin)
+    const query = {};
+
+    if (type) query.type = type;
+    if (status) query.status = status;
+    if (category) query.category = category;
+    if (serviceType) query.serviceType = serviceType;
+
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) query.createdAt.$gte = new Date(startDate);
+      if (endDate) query.createdAt.$lte = new Date(endDate);
+    }
+
+    // Fetch all transactions + populate user + provider
+    const transactions = await Transaction.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .populate("userId", "firstName lastName email")
+      .populate("providerId", "firstName lastName email")
+      .lean();
+
+    const total = await Transaction.countDocuments(query);
+
+    const formatted = transactions.map((t) => ({
+      id: t._id,
+      reference: t.reference,
+      type: t.type,
+      amount: t.amount,
+      formattedAmount: `₹${(t.amount || 0).toLocaleString('en-IN')}`,
+      description: t.description || "",
+      status: t.status,
+      category: t.category,
+      serviceId: t.serviceId,
+      serviceType: t.serviceType,
+
+      user: t.userId
+        ? {
+            id: t.userId._id,
+            name: `${t.userId.firstName} ${t.userId.lastName}`.trim(),
+            email: t.userId.email
+          }
+        : null,
+
+      provider: t.providerId
+        ? {
+            id: t.providerId._id,
+            name: `${t.providerId.firstName} ${t.providerId.lastName}`.trim(),
+            email: t.providerId.email
+          }
+        : null,
+
+      balanceBefore: t.balanceBefore || 0,
+      balanceAfter: t.balanceAfter || 0,
+      paymentMethod: t.paymentMethod || null,
+      createdAt: t.createdAt,
+      processedAt: t.processedAt || null,
+
+      canRefund:
+        t.type === "debit" && t.status === "completed" && t.amount > 0,
+
+      refundableAmount:
+        t.type === "debit" && t.status === "completed" ? t.amount : 0
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        transactions: formatted,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: page < Math.ceil(total / limit),
+          hasPrev: page > 1
+        },
+        filters: {
+          type,
+          status,
+          category,
+          serviceType,
+          dateRange:
+            startDate && endDate ? { startDate, endDate } : null
+        }
+      }
+    });
+  } catch (error) {
+    console.error("Error returning provider-admin transactions:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch transactions"
+    });
+  }
+};
+
 /**
  * Get transaction by reference ID
  */
@@ -691,6 +811,8 @@ export default {
   getTransactionByReference,
   getTransactionStats,
   exportTransactions,
-  searchTransactions
+  searchTransactions,
+  getAllTransactionsForProvider
 };
+
 
