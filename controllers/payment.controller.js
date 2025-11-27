@@ -640,4 +640,5 @@ export default {
   cancelPayment,
   initiateRefund,
   getPaymentStats
+
 };
