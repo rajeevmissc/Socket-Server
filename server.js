@@ -524,7 +524,7 @@ app.set('busyProviders', busyProviders);
 app.set('trust proxy', 1);
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "https://videocall-theta-pearl.vercel.app",
+  origin: process.env.FRONTEND_URL || "https://www.getcompanion.in",
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
