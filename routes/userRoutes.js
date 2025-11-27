@@ -6,7 +6,8 @@ import {
   getSessionsController,
   terminateSessionController,
   deleteAccountController,
-  getUserStatsController
+  getUserStatsController,
+  getUsersAdvancedController
 } from '../controllers/userController.js';
 
 import { validateUpdateProfile } from '../middleware/validationMiddleware.js';
@@ -30,5 +31,9 @@ router.delete('/sessions/:sessionId', terminateSessionController);
 router.get('/stats', getUserStatsController);
 router.delete('/account', requireVerification, deleteAccountController);
 
+// ✅ ADVANCED USER LIST (ONLY ONE FUNCTION TO USE)
+router.get('/list', authMiddleware, getUsersAdvancedController);
+
 // ---- Export ----
 export default router;
+
