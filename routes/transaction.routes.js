@@ -13,6 +13,9 @@ router.get('/',
   transactionController.getTransactions
 );
 
+router.get( '/get-provider-tranction',
+           transactionController
+
 // Get transaction by reference ID
 router.get('/reference/:reference',
   transactionController.getTransactionByReference
@@ -38,5 +41,6 @@ router.get('/export',
 
 // Apply error handler
 router.use(walletMiddleware.walletErrorHandler);
+
 
 export default router;
