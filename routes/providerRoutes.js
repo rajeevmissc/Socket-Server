@@ -6,7 +6,7 @@ import {
   getProviderById,
   updateProvider,
   deleteProvider,
-  getProvidersPersonalInfo
+  getAllProvidersPersonalInfo
 } from '../controllers/providerController.js';
 import Provider from '../models/Provider.js';
 const router = express.Router();
@@ -91,12 +91,13 @@ router.post('/update-status', async (req, res) => {
 // Routes - Only 5 essential endpoints
 router.post('/', providerValidation, createProvider);        // Create provider
 router.get('/', getAllProviders);                             // Get all with filters
-router.get('/personal-info', getProvidersPersonalInfo);
+router.get('/personal-info', getAllProvidersPersonalInfo);
 router.get('/:id', getProviderById);                          // Get single provider
 router.put('/:id', updateProvider);                           // Update provider
 router.delete('/:id', deleteProvider);                        // Delete provider
 
 export default router;
+
 
 
 
