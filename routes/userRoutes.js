@@ -32,8 +32,9 @@ router.get('/stats', getUserStatsController);
 router.delete('/account', requireVerification, deleteAccountController);
 
 // ✅ ADVANCED USER LIST (ONLY ONE FUNCTION TO USE)
-router.get('/list', authMiddleware, getUsersAdvancedController);
+router.get('/list', getUsersAdvancedController);
 
 // ---- Export ----
 export default router;
+
 
