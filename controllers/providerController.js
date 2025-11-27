@@ -49,10 +49,12 @@ export const createProvider = async (req, res) => {
 
 
 
-export const getProvidersPersonalInfo = async (req, res) => {
+// @desc    Get all providers with ONLY personalInfo
+// @route   GET /api/providers/personal-info
+// @access  Public
+export const getAllProvidersPersonalInfo = async (req, res) => {
   try {
-    const providers = await Provider.find({}, { personalInfo: 1 }) // projection
-      .sort({ "personalInfo.firstName": 1 });
+    const providers = await Provider.find({}, { personalInfo: 1 });
 
     res.status(200).json({
       success: true,
@@ -61,7 +63,7 @@ export const getProvidersPersonalInfo = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Error fetching provider personal info:", error);
+    console.error("Error fetching providers personal info:", error);
     res.status(500).json({
       success: false,
       message: "Server error while fetching providers personal info",
@@ -251,6 +253,7 @@ export const deleteProvider = async (req, res) => {
     });
   }
 };
+
 
 
 
