@@ -625,536 +625,6 @@
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-// // utils/smsUtils.js
-// // FINAL: UltraMsg-powered WhatsApp + "SMS" messaging (no Twilio needed)
-
-// import axios from "axios";
-// import qs from "qs";
-
-// // ==================== ULTRAMSG CONFIG ====================
-// // 🔁 Replace with your real instance & token or use env vars
-// const ULTRA_INSTANCE_ID = "instance153043";
-// const ULTRA_TOKEN = "k9iqqgpcqx1j2eo0";
-// const ULTRA_BASE_URL = `https://api.ultramsg.com/${ULTRA_INSTANCE_ID}/messages`;
-
-// // ==================== HELPERS ====================
-
-// const formatPhone = (phoneNumber) =>
-//   phoneNumber.startsWith("+") ? phoneNumber : `+${phoneNumber}`;
-
-// // ==================== MESSAGE TEMPLATES ====================
-
-// const formatWhatsAppOTPMessage = (
-//   otpCode,
-//   expiryMinutes = 10,
-//   serviceName = "ServiceConnect"
-// ) => {
-//   return `✨ *${serviceName} Secure Verification* ✨
-
-// 👋 Hello!
-
-// Your One-Time Password (OTP) is:
-
-// 🔐 *${otpCode}*
-
-// ⏳ This code is valid for *${expiryMinutes} minutes*.
-// 🚫 Do NOT share this code with anyone — even if they claim to be from ${serviceName}.
-
-// If you didn’t request this, simply ignore this message.
-
-// ────────────────────
-// 💼 *${serviceName} Support Team*`;
-// };
-
-// const formatSMSOTPMessage = (
-//   otpCode,
-//   expiryMinutes = 10,
-//   serviceName = "ServiceConnect"
-// ) => {
-//   return `${serviceName} Verification Code
-
-// OTP: ${otpCode}
-// Valid for ${expiryMinutes} minutes
-// Do NOT share with anyone.`;
-// };
-
-// // BOOKING – USER
-// const formatUserBookingMessage = (bookingDetails) => {
-//   const { providerName, date, timeSlot, mode, price, bookingId } = bookingDetails;
-//   const formattedDate = new Date(date).toLocaleDateString("en-IN", {
-//     weekday: "long",
-//     year: "numeric",
-//     month: "long",
-//     day: "numeric",
-//   });
-
-//   return `✅ *Your Booking is Confirmed!*
-
-// Thank you for choosing *ServiceConnect*.  
-// Your appointment has been successfully scheduled.
-
-// 📋 *Booking Summary*
-// ━━━━━━━━━━━━━━━━━━━━
-// 👨‍⚕️ *Provider:* ${providerName}
-// 📅 *Date:* ${formattedDate}
-// 🕒 *Time:* ${timeSlot}
-// 📍 *Mode:* ${mode}
-// 💰 *Amount:* ₹${price}
-// 🆔 *Booking ID:* ${bookingId}
-
-// ⏰ *Important Notes*
-// • Please be available 10 minutes before  
-// • Keep necessary documents ready  
-// • Ensure stable network connectivity  
-
-// 📞 Need help or want to reschedule?  
-// Contact support anytime.
-
-// ────────────────────  
-// 💼 *ServiceConnect — Your Trusted Partner*`;
-// };
-
-// // BOOKING – PROVIDER
-// const formatProviderBookingMessage = (bookingDetails) => {
-//   const { userName, userPhone, date, timeSlot, mode, price, bookingId } = bookingDetails;
-//   const formattedDate = new Date(date).toLocaleDateString("en-IN", {
-//     weekday: "long",
-//     year: "numeric",
-//     month: "long",
-//     day: "numeric",
-//   });
-
-//   return `🔔 *New Booking Assigned to You!*
-
-// A new appointment has been booked.
-
-// 📋 *Booking Details*
-// ━━━━━━━━━━━━━━━━━━━━
-// 👤 *Patient:* ${userName}
-// 📞 *Contact:* ${userPhone}
-// 📅 *Date:* ${formattedDate}
-// 🕒 *Time:* ${timeSlot}
-// 📍 *Mode:* ${mode}
-// 💰 *Amount:* ₹${price}
-// 🆔 *Booking ID:* ${bookingId}
-
-// ⚠️ *Action Required*
-// • Review the client's details  
-// • Prepare before the session  
-// • Check your provider dashboard for more information  
-
-// Your professionalism makes ServiceConnect shine! 💙
-
-// ────────────────────  
-// 👨‍⚕️ *ServiceConnect — Provider Portal*`;
-// };
-
-// // CANCELLATION – USER
-// const formatUserCancellationMessage = (d) => {
-//   const formattedDate = new Date(d.date).toLocaleDateString("en-IN", {
-//     weekday: "long",
-//     year: "numeric",
-//     month: "long",
-//     day: "numeric",
-//   });
-
-//   return `❌ *Your Booking Has Been Cancelled*
-
-// Here are the details for your cancelled appointment:
-
-// 📋 *Cancelled Booking Summary*
-// ━━━━━━━━━━━━━━━━━━━━
-// 👨‍⚕️ *Provider:* ${d.providerName}
-// 📅 *Date:* ${formattedDate}
-// 🕒 *Time:* ${d.timeSlot}
-// 🆔 *Booking ID:* ${d.bookingId}
-
-// ${
-//   d.cancelledBy === "user"
-//     ? "✓ You cancelled this booking."
-//     : "⚠️ This booking was cancelled by the provider."
-// }
-
-// 💰 *Refund Policy*
-// Your refund (if applicable) will be processed to your wallet within *24 hours*.
-
-// If you have any questions, just reply to this message.
-
-// ────────────────────  
-// 💼 *ServiceConnect — Your Trusted Partner*`;
-// };
-
-// // CANCELLATION – PROVIDER
-// const formatProviderCancellationMessage = (d) => {
-//   const formattedDate = new Date(d.date).toLocaleDateString("en-IN", {
-//     weekday: "long",
-//     year: "numeric",
-//     month: "long",
-//     day: "numeric",
-//   });
-
-//   return `❌ *Booking Cancelled*
-
-// A scheduled appointment has been cancelled.
-
-// 📋 *Cancelled Booking Summary*
-// ━━━━━━━━━━━━━━━━━━━━
-// 👤 *Patient:* ${d.userName}
-// 📞 *Contact:* ${d.userPhone}
-// 📅 *Date:* ${formattedDate}
-// 🕒 *Time:* ${d.timeSlot}
-// 🆔 *Booking ID:* ${d.bookingId}
-
-// ${
-//   d.cancelledBy === "provider"
-//     ? "✓ You cancelled this booking."
-//     : "⚠️ The patient has cancelled this booking."
-// }
-
-// Please update your availability if needed.
-
-// ────────────────────  
-// 👨‍⚕️ *ServiceConnect — Provider Portal*`;
-// };
-
-// // ==================== CORE ULTRAMSG SENDER ====================
-
-// const sendUltraMsgChat = async (phoneNumber, body) => {
-//   try {
-//     const data = qs.stringify({
-//       token: ULTRA_TOKEN,
-//       to: formatPhone(phoneNumber),
-//       body,
-//     });
-
-//     const res = await axios.post(`${ULTRA_BASE_URL}/chat`, data, {
-//       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-//     });
-
-//     return { success: true, data: res.data };
-//   } catch (err) {
-//     return { success: false, error: err.response?.data || err.message };
-//   }
-// };
-
-// // ==================== WRAPPED FUNCTIONS (KEEP OLD NAMES) ====================
-
-// /**
-//  * Drop-in replacement for old Twilio SMS
-//  */
-// export const sendTwilioSMS = async (phoneNumber, message, isOTP = false, otpCode = null) => {
-//   const finalMessage =
-//     isOTP && otpCode ? formatSMSOTPMessage(otpCode) : message;
-
-//   return sendUltraMsgChat(phoneNumber, finalMessage);
-// };
-
-// /**
-//  * Drop-in replacement for old Twilio WhatsApp
-//  */
-// export const sendWhatsAppMessage = async (phoneNumber, message, isOTP = false, otpCode = null) => {
-//   const finalMessage =
-//     isOTP && otpCode ? formatWhatsAppOTPMessage(otpCode) : message;
-
-//   return sendUltraMsgChat(phoneNumber, finalMessage);
-// };
-
-// // ==================== OTP FUNCTIONS ====================
-
-// export const sendOTPViaSMS = async (phoneNumber, otpCode, expiryMinutes = 10) => {
-//   console.log(`\n🔐 Sending OTP via SMS to ${phoneNumber}`);
-//   console.log(`   OTP: ${otpCode}`);
-//   console.log(`   Expiry: ${expiryMinutes} minutes`);
-
-//   return sendTwilioSMS(phoneNumber, null, true, otpCode);
-// };
-
-// export const sendOTPViaWhatsApp = async (phoneNumber, otpCode, expiryMinutes = 10) => {
-//   console.log(`\n🔐 Sending OTP via WhatsApp to ${phoneNumber}`);
-//   console.log(`   OTP: ${otpCode}`);
-//   console.log(`   Expiry: ${expiryMinutes} minutes`);
-
-//   return sendWhatsAppMessage(phoneNumber, null, true, otpCode);
-// };
-
-// /**
-//  * Strategy-based OTP sender:
-//  * - default: SMS first, WhatsApp fallback
-//  * - preferWhatsApp: WhatsApp first, SMS fallback
-//  * - sendBoth: both in parallel
-//  */
-// export const sendOTP = async (phoneNumber, otpCode, expiryMinutes = 10, options = {}) => {
-//   const { preferWhatsApp = false, sendBoth = false } = options;
-//   const formattedPhoneNumber = formatPhone(phoneNumber);
-
-//   console.log(`\n🔐 Sending OTP to ${formattedPhoneNumber}`);
-//   console.log(`   OTP: ${otpCode}`);
-//   console.log(`   Expiry: ${expiryMinutes} minutes`);
-//   console.log(
-//     `   Strategy: ${
-//       sendBoth
-//         ? "Both channels"
-//         : preferWhatsApp
-//         ? "WhatsApp preferred"
-//         : "SMS preferred"
-//     }`
-//   );
-
-//   try {
-//     if (sendBoth) {
-//       const [sms, wa] = await Promise.allSettled([
-//         sendOTPViaSMS(formattedPhoneNumber, otpCode, expiryMinutes),
-//         sendOTPViaWhatsApp(formattedPhoneNumber, otpCode, expiryMinutes),
-//       ]);
-
-//       return {
-//         sms: sms.status === "fulfilled" ? sms.value : { success: false, error: sms.reason },
-//         whatsapp: wa.status === "fulfilled" ? wa.value : { success: false, error: wa.reason },
-//         success:
-//           (sms.status === "fulfilled" && sms.value.success) ||
-//           (wa.status === "fulfilled" && wa.value.success),
-//       };
-//     }
-
-//     if (preferWhatsApp) {
-//       const wa = await sendOTPViaWhatsApp(formattedPhoneNumber, otpCode, expiryMinutes);
-//       if (wa.success) {
-//         return { success: true, channel: "whatsapp", details: wa };
-//       }
-
-//       console.log("⚠️ WhatsApp OTP failed, trying SMS...");
-//       const sms = await sendOTPViaSMS(formattedPhoneNumber, otpCode, expiryMinutes);
-//       return {
-//         success: sms.success,
-//         channel: sms.success ? "sms" : "none",
-//         details: sms,
-//       };
-//     }
-
-//     // Default: SMS first, then WhatsApp fallback
-//     const sms = await sendOTPViaSMS(formattedPhoneNumber, otpCode, expiryMinutes);
-//     if (sms.success) {
-//       return { success: true, channel: "sms", details: sms };
-//     }
-
-//     console.log("⚠️ SMS OTP failed, trying WhatsApp...");
-//     const wa = await sendOTPViaWhatsApp(formattedPhoneNumber, otpCode, expiryMinutes);
-//     return {
-//       success: wa.success,
-//       channel: wa.success ? "whatsapp" : "none",
-//       details: wa,
-//     };
-//   } catch (error) {
-//     console.error("❌ OTP sending failed:", error);
-//     return { success: false, channel: "none", error: error.message };
-//   }
-// };
-
-// // ==================== MAIN MESSAGE FUNCTIONS ====================
-
-// export const sendSMS = async (phoneNumber, message, options = {}) => {
-//   if (!phoneNumber) {
-//     console.error("❌ Phone number is required");
-//     return { success: false, error: "Phone number is required" };
-//   }
-
-//   const formattedPhoneNumber = formatPhone(phoneNumber);
-//   console.log(`\n🚀 Sending SMS-like message to ${formattedPhoneNumber}`);
-
-//   return sendTwilioSMS(formattedPhoneNumber, message);
-// };
-
-// export const sendWhatsApp = async (phoneNumber, message) => {
-//   const formattedPhoneNumber = formatPhone(phoneNumber);
-//   console.log(`\n🚀 Sending WhatsApp message to ${formattedPhoneNumber}`);
-
-//   return sendWhatsAppMessage(formattedPhoneNumber, message);
-// };
-
-// export const sendBothSMSAndWhatsApp = async (phoneNumber, message) => {
-//   console.log("\n🚀 Sending via both SMS and WhatsApp...");
-//   const formattedPhoneNumber = formatPhone(phoneNumber);
-
-//   const [sms, wa] = await Promise.allSettled([
-//     sendTwilioSMS(formattedPhoneNumber, message),
-//     sendWhatsAppMessage(formattedPhoneNumber, message),
-//   ]);
-
-//   return {
-//     sms: sms.status === "fulfilled" ? sms.value : { success: false, error: sms.reason },
-//     whatsapp: wa.status === "fulfilled" ? wa.value : { success: false, error: wa.reason },
-//     success:
-//       (sms.status === "fulfilled" && sms.value.success) ||
-//       (wa.status === "fulfilled" && wa.value.success),
-//   };
-// };
-
-// // ==================== BOOKING NOTIFICATIONS ====================
-
-// export const sendBookingNotifications = async (bookingData) => {
-//   try {
-//     const d = bookingData;
-
-//     console.log("\n📬 Sending Booking Notifications...");
-//     console.log(`   User: ${d.userName} (${d.userPhone})`);
-//     console.log(`   Provider: ${d.providerName} (${d.providerPhone})`);
-
-//     const formattedUserPhone = formatPhone(d.userPhone);
-//     const formattedProviderPhone = formatPhone(d.providerPhone);
-
-//     const userMessage = formatUserBookingMessage({
-//       providerName: d.providerName,
-//       date: d.date,
-//       timeSlot: d.timeSlot,
-//       mode: d.mode,
-//       price: d.price,
-//       bookingId: d.bookingId,
-//     });
-
-//     const providerMessage = formatProviderBookingMessage({
-//       userName: d.userName,
-//       userPhone: formattedUserPhone,
-//       date: d.date,
-//       timeSlot: d.timeSlot,
-//       mode: d.mode,
-//       price: d.price,
-//       bookingId: d.bookingId,
-//     });
-
-//     const [userResult, providerResult] = await Promise.allSettled([
-//       sendWhatsAppMessage(formattedUserPhone, userMessage),
-//       sendWhatsAppMessage(formattedProviderPhone, providerMessage),
-//     ]);
-
-//     const results = {
-//       user: {
-//         sent:
-//           userResult.status === "fulfilled" && userResult.value.success,
-//         phone: formattedUserPhone,
-//         error:
-//           userResult.status === "rejected"
-//             ? userResult.reason
-//             : userResult.status === "fulfilled" && !userResult.value.success
-//             ? userResult.value.error
-//             : null,
-//       },
-//       provider: {
-//         sent:
-//           providerResult.status === "fulfilled" &&
-//           providerResult.value.success,
-//         phone: formattedProviderPhone,
-//         error:
-//           providerResult.status === "rejected"
-//             ? providerResult.reason
-//             : providerResult.status === "fulfilled" &&
-//               !providerResult.value.success
-//             ? providerResult.value.error
-//             : null,
-//       },
-//     };
-
-//     console.log("\n✅ Booking Notifications Summary:");
-//     console.log(
-//       `   User notification: ${results.user.sent ? "✓ Sent" : "✗ Failed"}`
-//     );
-//     console.log(
-//       `   Provider notification: ${
-//         results.provider.sent ? "✓ Sent" : "✗ Failed"
-//       }`
-//     );
-
-//     return results;
-//   } catch (error) {
-//     console.error("❌ Booking Notifications Error:", error);
-//     return {
-//       user: { sent: false, error: error.message },
-//       provider: { sent: false, error: error.message },
-//     };
-//   }
-// };
-
-// // ==================== CANCELLATION NOTIFICATIONS ====================
-
-// export const sendCancellationNotifications = async (bookingData) => {
-//   try {
-//     const d = bookingData;
-
-//     const formattedUserPhone = formatPhone(d.userPhone);
-//     const formattedProviderPhone = formatPhone(d.providerPhone);
-
-//     const userMessage = formatUserCancellationMessage(d);
-//     const providerMessage = formatProviderCancellationMessage(d);
-
-//     const [userResult, providerResult] = await Promise.allSettled([
-//       sendWhatsAppMessage(formattedUserPhone, userMessage),
-//       sendWhatsAppMessage(formattedProviderPhone, providerMessage),
-//     ]);
-
-//     return {
-//       user: {
-//         sent:
-//           userResult.status === "fulfilled" && userResult.value.success,
-//         error:
-//           userResult.status === "rejected"
-//             ? userResult.reason
-//             : userResult.status === "fulfilled" && !userResult.value.success
-//             ? userResult.value.error
-//             : null,
-//       },
-//       provider: {
-//         sent:
-//           providerResult.status === "fulfilled" &&
-//           providerResult.value.success,
-//         error:
-//           providerResult.status === "rejected"
-//             ? providerResult.reason
-//             : providerResult.status === "fulfilled" &&
-//               !providerResult.value.success
-//             ? providerResult.value.error
-//             : null,
-//       },
-//     };
-//   } catch (error) {
-//     console.error("❌ Cancellation Notifications Error:", error);
-//     return {
-//       user: { sent: false, error: error.message },
-//       provider: { sent: false, error: error.message },
-//     };
-//   }
-// };
-
-// // ==================== EXPORTS ====================
-
-// export default {
-//   sendSMS,
-//   sendWhatsApp,
-//   sendOTP,
-//   sendOTPViaSMS,
-//   sendOTPViaWhatsApp,
-//   sendBothSMSAndWhatsApp,
-//   sendBookingNotifications,
-//   sendCancellationNotifications,
-//   sendTwilioSMS,
-//   sendWhatsAppMessage,
-// };
-
-
-
-
-
-
-
 // utils/smsUtils.js
 // FINAL: UltraMsg-powered WhatsApp + "SMS" messaging (no Twilio needed)
 
@@ -1202,21 +672,6 @@ Need help? Contact our support team anytime.
 
 ────────────────────
 💼 *${serviceName}* — Your Trusted Companion`;
-};
-
-const formatSMSOTPMessage = (
-  otpCode,
-  expiryMinutes = 10,
-  serviceName = "GetCompanion"
-) => {
-  return `${serviceName} Verification
-
-Your OTP: ${otpCode}
-
-Valid for ${expiryMinutes} minutes.
-Do NOT share with anyone.
-
-- ${serviceName} Team`;
 };
 
 // BOOKING – USER
@@ -1389,30 +844,36 @@ const sendUltraMsgChat = async (phoneNumber, body) => {
   }
 };
 
-// ==================== WRAPPED FUNCTIONS (KEEP OLD NAMES) ====================
+// ==================== WRAPPED FUNCTIONS (BACKWARD COMPATIBLE) ====================
 
 /**
- * Drop-in replacement for old Twilio SMS
+ * Backward compatible - now sends via WhatsApp
  */
 export const sendTwilioSMS = async (phoneNumber, message, isOTP = false, otpCode = null, expiryMinutes = 10) => {
-  console.log(`\n🔍 sendTwilioSMS called with:`);
+  console.log(`\n🔍 sendTwilioSMS called (redirected to WhatsApp)`);
   console.log(`   phoneNumber: ${phoneNumber}`);
   console.log(`   message: ${message}`);
   console.log(`   isOTP: ${isOTP}`);
   console.log(`   otpCode: ${otpCode}`);
   console.log(`   expiryMinutes: ${expiryMinutes}`);
   
-  const finalMessage =
-    isOTP && otpCode ? formatSMSOTPMessage(otpCode, expiryMinutes) : message;
-
-  console.log(`\n📋 Final message to send:`);
-  console.log(finalMessage);
-
-  return sendUltraMsgChat(phoneNumber, finalMessage);
+  // If it's an OTP, use the template
+  if (isOTP && otpCode) {
+    return sendWhatsAppMessage(phoneNumber, null, true, otpCode, expiryMinutes);
+  }
+  
+  // If message looks like an OTP code, use template
+  const isOTPCode = /^\d{4,8}$/.test(String(message).trim());
+  if (isOTPCode) {
+    return sendWhatsAppMessage(phoneNumber, null, true, message, expiryMinutes);
+  }
+  
+  // Otherwise send regular message
+  return sendWhatsAppMessage(phoneNumber, message);
 };
 
 /**
- * Drop-in replacement for old Twilio WhatsApp
+ * Send WhatsApp message with professional OTP template
  */
 export const sendWhatsAppMessage = async (phoneNumber, message, isOTP = false, otpCode = null, expiryMinutes = 10) => {
   console.log(`\n🔍 sendWhatsAppMessage called with:`);
@@ -1431,22 +892,23 @@ export const sendWhatsAppMessage = async (phoneNumber, message, isOTP = false, o
   return sendUltraMsgChat(phoneNumber, finalMessage);
 };
 
-// ==================== OTP FUNCTIONS ====================
+// ==================== OTP FUNCTIONS (ALL USE WHATSAPP) ====================
 
+/**
+ * Backward compatible - now sends via WhatsApp
+ */
 export const sendOTPViaSMS = async (phoneNumber, otpCode, expiryMinutes = 10) => {
-  console.log(`\n🔐 Sending OTP via SMS to ${phoneNumber}`);
+  console.log(`\n🔐 sendOTPViaSMS called (redirected to WhatsApp)`);
+  console.log(`   Sending OTP via WhatsApp to ${phoneNumber}`);
   console.log(`   OTP: ${otpCode}`);
   console.log(`   Expiry: ${expiryMinutes} minutes`);
   
-  const formattedMessage = formatSMSOTPMessage(otpCode, expiryMinutes);
-  console.log(`\n📱 SMS Message Preview:`);
-  console.log("-".repeat(50));
-  console.log(formattedMessage);
-  console.log("-".repeat(50));
-
-  return sendTwilioSMS(phoneNumber, null, true, otpCode, expiryMinutes);
+  return sendOTPViaWhatsApp(phoneNumber, otpCode, expiryMinutes);
 };
 
+/**
+ * Send OTP via WhatsApp with professional template
+ */
 export const sendOTPViaWhatsApp = async (phoneNumber, otpCode, expiryMinutes = 10) => {
   console.log(`\n🔐 Sending OTP via WhatsApp to ${phoneNumber}`);
   console.log(`   OTP: ${otpCode}`);
@@ -1462,71 +924,23 @@ export const sendOTPViaWhatsApp = async (phoneNumber, otpCode, expiryMinutes = 1
 };
 
 /**
- * Strategy-based OTP sender:
- * - default: SMS first, WhatsApp fallback
- * - preferWhatsApp: WhatsApp first, SMS fallback
- * - sendBoth: both in parallel
+ * Main OTP function - sends via WhatsApp only
  */
 export const sendOTP = async (phoneNumber, otpCode, expiryMinutes = 10, options = {}) => {
-  const { preferWhatsApp = false, sendBoth = false } = options;
   const formattedPhoneNumber = formatPhone(phoneNumber);
 
   console.log(`\n🔐 Sending OTP to ${formattedPhoneNumber}`);
   console.log(`   OTP: ${otpCode}`);
   console.log(`   Expiry: ${expiryMinutes} minutes`);
-  console.log(
-    `   Strategy: ${
-      sendBoth
-        ? "Both channels"
-        : preferWhatsApp
-        ? "WhatsApp preferred"
-        : "SMS preferred"
-    }`
-  );
+  console.log(`   Channel: WhatsApp Only`);
 
   try {
-    if (sendBoth) {
-      const [sms, wa] = await Promise.allSettled([
-        sendOTPViaSMS(formattedPhoneNumber, otpCode, expiryMinutes),
-        sendOTPViaWhatsApp(formattedPhoneNumber, otpCode, expiryMinutes),
-      ]);
-
-      return {
-        sms: sms.status === "fulfilled" ? sms.value : { success: false, error: sms.reason },
-        whatsapp: wa.status === "fulfilled" ? wa.value : { success: false, error: wa.reason },
-        success:
-          (sms.status === "fulfilled" && sms.value.success) ||
-          (wa.status === "fulfilled" && wa.value.success),
-      };
-    }
-
-    if (preferWhatsApp) {
-      const wa = await sendOTPViaWhatsApp(formattedPhoneNumber, otpCode, expiryMinutes);
-      if (wa.success) {
-        return { success: true, channel: "whatsapp", details: wa };
-      }
-
-      console.log("⚠️ WhatsApp OTP failed, trying SMS...");
-      const sms = await sendOTPViaSMS(formattedPhoneNumber, otpCode, expiryMinutes);
-      return {
-        success: sms.success,
-        channel: sms.success ? "sms" : "none",
-        details: sms,
-      };
-    }
-
-    // Default: SMS first, then WhatsApp fallback
-    const sms = await sendOTPViaSMS(formattedPhoneNumber, otpCode, expiryMinutes);
-    if (sms.success) {
-      return { success: true, channel: "sms", details: sms };
-    }
-
-    console.log("⚠️ SMS OTP failed, trying WhatsApp...");
-    const wa = await sendOTPViaWhatsApp(formattedPhoneNumber, otpCode, expiryMinutes);
+    const result = await sendOTPViaWhatsApp(formattedPhoneNumber, otpCode, expiryMinutes);
+    
     return {
-      success: wa.success,
-      channel: wa.success ? "whatsapp" : "none",
-      details: wa,
+      success: result.success,
+      channel: result.success ? "whatsapp" : "none",
+      details: result,
     };
   } catch (error) {
     console.error("❌ OTP sending failed:", error);
@@ -1536,6 +950,10 @@ export const sendOTP = async (phoneNumber, otpCode, expiryMinutes = 10, options 
 
 // ==================== MAIN MESSAGE FUNCTIONS ====================
 
+/**
+ * SMART SMS FUNCTION - Detects if message is an OTP and uses WhatsApp template
+ * This maintains backward compatibility with existing code
+ */
 export const sendSMS = async (phoneNumber, message, options = {}) => {
   if (!phoneNumber) {
     console.error("❌ Phone number is required");
@@ -1543,9 +961,19 @@ export const sendSMS = async (phoneNumber, message, options = {}) => {
   }
 
   const formattedPhoneNumber = formatPhone(phoneNumber);
-  console.log(`\n🚀 Sending SMS-like message to ${formattedPhoneNumber}`);
-
-  return sendTwilioSMS(formattedPhoneNumber, message);
+  
+  // 🎯 SMART DETECTION: If message is just digits (OTP), use WhatsApp template
+  const isOTPCode = /^\d{4,8}$/.test(String(message).trim());
+  
+  if (isOTPCode) {
+    console.log(`\n🔐 Detected OTP code: ${message}`);
+    console.log(`🚀 Sending via WhatsApp with professional template to ${formattedPhoneNumber}`);
+    return sendOTPViaWhatsApp(formattedPhoneNumber, message, 10);
+  }
+  
+  // For regular messages, send as-is via WhatsApp
+  console.log(`\n🚀 Sending regular WhatsApp message to ${formattedPhoneNumber}`);
+  return sendWhatsAppMessage(formattedPhoneNumber, message);
 };
 
 export const sendWhatsApp = async (phoneNumber, message) => {
@@ -1556,20 +984,16 @@ export const sendWhatsApp = async (phoneNumber, message) => {
 };
 
 export const sendBothSMSAndWhatsApp = async (phoneNumber, message) => {
-  console.log("\n🚀 Sending via both SMS and WhatsApp...");
+  console.log("\n🚀 Sending via WhatsApp (sendBothSMSAndWhatsApp)...");
   const formattedPhoneNumber = formatPhone(phoneNumber);
 
-  const [sms, wa] = await Promise.allSettled([
-    sendTwilioSMS(formattedPhoneNumber, message),
-    sendWhatsAppMessage(formattedPhoneNumber, message),
-  ]);
+  // Both routes now go to WhatsApp
+  const result = await sendWhatsAppMessage(formattedPhoneNumber, message);
 
   return {
-    sms: sms.status === "fulfilled" ? sms.value : { success: false, error: sms.reason },
-    whatsapp: wa.status === "fulfilled" ? wa.value : { success: false, error: wa.reason },
-    success:
-      (sms.status === "fulfilled" && sms.value.success) ||
-      (wa.status === "fulfilled" && wa.value.success),
+    sms: result, // Same result for both
+    whatsapp: result,
+    success: result.success,
   };
 };
 
@@ -1710,14 +1134,14 @@ export const sendCancellationNotifications = async (bookingData) => {
 // ==================== EXPORTS ====================
 
 export default {
-  sendSMS,
+  sendSMS,              // Now sends via WhatsApp (smart OTP detection)
   sendWhatsApp,
   sendOTP,
-  sendOTPViaSMS,
+  sendOTPViaSMS,        // Now sends via WhatsApp
   sendOTPViaWhatsApp,
-  sendBothSMSAndWhatsApp,
+  sendBothSMSAndWhatsApp, // Now sends via WhatsApp
   sendBookingNotifications,
   sendCancellationNotifications,
-  sendTwilioSMS,
+  sendTwilioSMS,        // Now sends via WhatsApp
   sendWhatsAppMessage,
 };
