@@ -1156,9 +1156,6 @@
 
 
 
-
-
-
 // utils/smsUtils.js
 // FINAL: UltraMsg-powered WhatsApp + "SMS" messaging (no Twilio needed)
 
@@ -1387,9 +1384,9 @@ const sendUltraMsgChat = async (phoneNumber, body) => {
 /**
  * Drop-in replacement for old Twilio SMS
  */
-export const sendTwilioSMS = async (phoneNumber, message, isOTP = false, otpCode = null) => {
+export const sendTwilioSMS = async (phoneNumber, message, isOTP = false, otpCode = null, expiryMinutes = 10) => {
   const finalMessage =
-    isOTP && otpCode ? formatSMSOTPMessage(otpCode) : message;
+    isOTP && otpCode ? formatSMSOTPMessage(otpCode, expiryMinutes) : message;
 
   return sendUltraMsgChat(phoneNumber, finalMessage);
 };
@@ -1397,9 +1394,9 @@ export const sendTwilioSMS = async (phoneNumber, message, isOTP = false, otpCode
 /**
  * Drop-in replacement for old Twilio WhatsApp
  */
-export const sendWhatsAppMessage = async (phoneNumber, message, isOTP = false, otpCode = null) => {
+export const sendWhatsAppMessage = async (phoneNumber, message, isOTP = false, otpCode = null, expiryMinutes = 10) => {
   const finalMessage =
-    isOTP && otpCode ? formatWhatsAppOTPMessage(otpCode) : message;
+    isOTP && otpCode ? formatWhatsAppOTPMessage(otpCode, expiryMinutes) : message;
 
   return sendUltraMsgChat(phoneNumber, finalMessage);
 };
@@ -1411,7 +1408,7 @@ export const sendOTPViaSMS = async (phoneNumber, otpCode, expiryMinutes = 10) =>
   console.log(`   OTP: ${otpCode}`);
   console.log(`   Expiry: ${expiryMinutes} minutes`);
 
-  return sendTwilioSMS(phoneNumber, null, true, otpCode);
+  return sendTwilioSMS(phoneNumber, null, true, otpCode, expiryMinutes);
 };
 
 export const sendOTPViaWhatsApp = async (phoneNumber, otpCode, expiryMinutes = 10) => {
@@ -1419,7 +1416,7 @@ export const sendOTPViaWhatsApp = async (phoneNumber, otpCode, expiryMinutes = 1
   console.log(`   OTP: ${otpCode}`);
   console.log(`   Expiry: ${expiryMinutes} minutes`);
 
-  return sendWhatsAppMessage(phoneNumber, null, true, otpCode);
+  return sendWhatsAppMessage(phoneNumber, null, true, otpCode, expiryMinutes);
 };
 
 /**
@@ -1682,9 +1679,3 @@ export default {
   sendTwilioSMS,
   sendWhatsAppMessage,
 };
-
-
-
-
-
-
