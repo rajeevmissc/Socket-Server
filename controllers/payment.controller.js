@@ -16,15 +16,13 @@ export const createCheckoutSession = async (req, res) => {
       cancel_url,
       metadata = {}
     } = req.body;
-
-    console.log('success_url',success_url);
     
     // Generate order and receipt IDs
     const orderId = generateOrderId(req.user._id);
     const receipt = generateReceiptId('wallet');
     
     // Use production URLs or fallback
-    const baseUrl = 'https://videocall-theta-pearl.vercel.app/wallet';
+    const baseUrl = 'https://www.getcompanion.in/wallet';
     
     // Create Stripe checkout session
     const session = await stripe.checkout.sessions.create({
@@ -644,4 +642,5 @@ export default {
   getPaymentStats
 
 };
+
 
