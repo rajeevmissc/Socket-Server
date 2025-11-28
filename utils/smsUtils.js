@@ -1155,7 +1155,6 @@
 
 
 
-
 // utils/smsUtils.js
 // FINAL: UltraMsg-powered WhatsApp + "SMS" messaging (no Twilio needed)
 
@@ -1363,6 +1362,14 @@ Please update your availability if needed.
 
 const sendUltraMsgChat = async (phoneNumber, body) => {
   try {
+    console.log("\n📤 ULTRAMSG API CALL");
+    console.log("=".repeat(50));
+    console.log(`📞 To: ${formatPhone(phoneNumber)}`);
+    console.log(`📝 Message Body:`);
+    console.log("-".repeat(50));
+    console.log(body);
+    console.log("=".repeat(50));
+
     const data = qs.stringify({
       token: ULTRA_TOKEN,
       to: formatPhone(phoneNumber),
@@ -1373,8 +1380,11 @@ const sendUltraMsgChat = async (phoneNumber, body) => {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
 
+    console.log("✅ UltraMsg Response:", JSON.stringify(res.data, null, 2));
+
     return { success: true, data: res.data };
   } catch (err) {
+    console.error("❌ UltraMsg Error:", err.response?.data || err.message);
     return { success: false, error: err.response?.data || err.message };
   }
 };
@@ -1385,8 +1395,18 @@ const sendUltraMsgChat = async (phoneNumber, body) => {
  * Drop-in replacement for old Twilio SMS
  */
 export const sendTwilioSMS = async (phoneNumber, message, isOTP = false, otpCode = null, expiryMinutes = 10) => {
+  console.log(`\n🔍 sendTwilioSMS called with:`);
+  console.log(`   phoneNumber: ${phoneNumber}`);
+  console.log(`   message: ${message}`);
+  console.log(`   isOTP: ${isOTP}`);
+  console.log(`   otpCode: ${otpCode}`);
+  console.log(`   expiryMinutes: ${expiryMinutes}`);
+  
   const finalMessage =
     isOTP && otpCode ? formatSMSOTPMessage(otpCode, expiryMinutes) : message;
+
+  console.log(`\n📋 Final message to send:`);
+  console.log(finalMessage);
 
   return sendUltraMsgChat(phoneNumber, finalMessage);
 };
@@ -1395,8 +1415,18 @@ export const sendTwilioSMS = async (phoneNumber, message, isOTP = false, otpCode
  * Drop-in replacement for old Twilio WhatsApp
  */
 export const sendWhatsAppMessage = async (phoneNumber, message, isOTP = false, otpCode = null, expiryMinutes = 10) => {
+  console.log(`\n🔍 sendWhatsAppMessage called with:`);
+  console.log(`   phoneNumber: ${phoneNumber}`);
+  console.log(`   message: ${message}`);
+  console.log(`   isOTP: ${isOTP}`);
+  console.log(`   otpCode: ${otpCode}`);
+  console.log(`   expiryMinutes: ${expiryMinutes}`);
+  
   const finalMessage =
     isOTP && otpCode ? formatWhatsAppOTPMessage(otpCode, expiryMinutes) : message;
+
+  console.log(`\n📋 Final message to send:`);
+  console.log(finalMessage);
 
   return sendUltraMsgChat(phoneNumber, finalMessage);
 };
@@ -1407,6 +1437,12 @@ export const sendOTPViaSMS = async (phoneNumber, otpCode, expiryMinutes = 10) =>
   console.log(`\n🔐 Sending OTP via SMS to ${phoneNumber}`);
   console.log(`   OTP: ${otpCode}`);
   console.log(`   Expiry: ${expiryMinutes} minutes`);
+  
+  const formattedMessage = formatSMSOTPMessage(otpCode, expiryMinutes);
+  console.log(`\n📱 SMS Message Preview:`);
+  console.log("-".repeat(50));
+  console.log(formattedMessage);
+  console.log("-".repeat(50));
 
   return sendTwilioSMS(phoneNumber, null, true, otpCode, expiryMinutes);
 };
@@ -1415,6 +1451,12 @@ export const sendOTPViaWhatsApp = async (phoneNumber, otpCode, expiryMinutes = 1
   console.log(`\n🔐 Sending OTP via WhatsApp to ${phoneNumber}`);
   console.log(`   OTP: ${otpCode}`);
   console.log(`   Expiry: ${expiryMinutes} minutes`);
+  
+  const formattedMessage = formatWhatsAppOTPMessage(otpCode, expiryMinutes);
+  console.log(`\n💬 WhatsApp Message Preview:`);
+  console.log("-".repeat(50));
+  console.log(formattedMessage);
+  console.log("-".repeat(50));
 
   return sendWhatsAppMessage(phoneNumber, null, true, otpCode, expiryMinutes);
 };
