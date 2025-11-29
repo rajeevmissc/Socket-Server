@@ -58,8 +58,8 @@ createBooking: async (req, res) => {
       });
     }
 
-    // Check wallet balance (5x requirement)
-    const requiredBalance = price * 5;
+    // Check wallet balance (1x requirement)
+    const requiredBalance = price * 1;
     const walletBalance = await walletService.getBalance(userId);
     if (walletBalance < requiredBalance) {
       return res.status(400).json({
@@ -622,6 +622,7 @@ getLatestProviderBooking: async (req, res) => {
 };
 
 export default bookingController;
+
 
 
 
