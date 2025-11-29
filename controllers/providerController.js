@@ -178,7 +178,7 @@ export const getAllProviders = async (req, res) => {
     const presencePriority = {
       online: 1,
       recently_active: 2,
-      available: 3,
+      // available: 3,
       busy: 4,
       offline: 5
     };
@@ -362,6 +362,7 @@ export const deleteProvider = async (req, res) => {
     });
   }
 };
+
 
 
 
