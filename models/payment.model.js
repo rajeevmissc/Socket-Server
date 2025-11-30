@@ -37,16 +37,44 @@ const paymentSchema = new mongoose.Schema({
     default: 'created',
     index: true
   },
+  // paymentMethod: { 
+  //   type: String, 
+  //   required: true,
+  //   enum: ['UPI', 'Credit Card', 'Debit Card', 'amazon_pay', 'Net Banking', 'Wallet', 'Cash', 'Stripe', 'Stripe Checkout','Credit/Debit Card',]
+  // },
+  // paymentGateway: {
+  //   type: String,
+  //   enum: ['Razorpay', 'Stripe', 'PayPal', 'Manual'],
+  //   default: 'Stripe'
+  // },
+
+
   paymentMethod: { 
-    type: String, 
-    required: true,
-    enum: ['UPI', 'Credit Card', 'Debit Card', 'amazon_pay', 'Net Banking', 'Wallet', 'Cash', 'Stripe', 'Stripe Checkout','Credit/Debit Card',]
-  },
-  paymentGateway: {
-    type: String,
-    enum: ['Razorpay', 'Stripe', 'PayPal', 'Manual'],
-    default: 'Stripe'
-  },
+  type: String, 
+  required: true,
+  enum: [
+    'UPI',
+    'Credit Card',
+    'Debit Card',
+    'Net Banking',
+    'Wallet',
+    'Cash',
+    'Stripe',
+    'Stripe Checkout',
+    'Credit/Debit Card',
+
+    // ⭐ Added for Cashfree integration
+    'Cashfree',
+    'Cashfree Checkout'
+  ]
+},
+
+paymentGateway: {
+  type: String,
+  enum: ['Razorpay', 'Stripe', 'PayPal', 'Manual', 'Cashfree'], // ⭐ Add Cashfree
+  default: 'Cashfree'
+},
+
   
   // Gateway-specific data
   gatewayResponse: { 
@@ -303,5 +331,6 @@ paymentSchema.pre('save', function(next) {
 paymentSchema.post('save', function(doc) {
   console.log(`Payment ${doc.paymentId} status updated to: ${doc.status}`);
 });
+
 
 export const Payment = mongoose.model('Payment', paymentSchema);
