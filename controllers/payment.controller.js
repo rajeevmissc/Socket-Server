@@ -779,6 +779,89 @@ export const createCheckoutSession = async (req, res) => {
 
 
 
+export const initiateRefund = async (req, res) => {
+  try {
+    const { paymentId } = req.params;
+    const { amount, reason } = req.body;
+    
+    const payment = await Payment.findOne({ 
+      paymentId,
+      userId: req.user._id,
+      status: 'captured'
+    });
+    
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        error: 'Captured payment not found',
+        code: 'PAYMENT_NOT_FOUND'
+      });
+    }
+    
+    if (!payment.canRefund()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Payment cannot be refunded',
+        code: 'REFUND_NOT_ALLOWED'
+      });
+    }
+    
+    const refundAmount = amount || payment.refundableAmount;
+    
+    if (refundAmount > payment.refundableAmount) {
+      return res.status(400).json({
+        success: false,
+        error: 'Refund amount exceeds refundable amount',
+        code: 'INVALID_REFUND_AMOUNT',
+        maxRefundable: payment.refundableAmount
+      });
+    }
+    
+    let paymentIntentId = payment.gatewayResponse.payment_intent;
+    
+    if (!paymentIntentId) {
+      const session = await stripe.checkout.sessions.retrieve(paymentId);
+      paymentIntentId = session.payment_intent;
+    }
+    
+    const refund = await stripe.refunds.create({
+      payment_intent: paymentIntentId,
+      amount: refundAmount * 100,
+      metadata: {
+        reason: reason || 'Customer request',
+        userId: req.user._id.toString()
+      }
+    });
+    
+    await payment.addRefund({
+      refundId: refund.id,
+      amount: refundAmount,
+      reason: reason || 'Customer request',
+      status: 'processed',
+      processedAt: new Date()
+    });
+
+    
+    res.json({
+      success: true,
+      data: {
+        refundId: refund.id,
+        paymentId,
+        refundAmount,
+        status: 'processed',
+        message: 'Refund processed successfully'
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error initiating refund:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process refund'
+    });
+  }
+};
+
 
 /**
  * Verify Cashfree payment (used by /verify-session/:sessionId)
@@ -1197,6 +1280,7 @@ export default {
   initiateRefund: initiateRefundCashfree,
   getPaymentStats,
 };
+
 
 
 
