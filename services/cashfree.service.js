@@ -1,17 +1,16 @@
 // services/cashfree.service.js
-import { Cashfree } from 'cashfree-pg-sdk-javascript';
-
-// Initialize Cashfree with your credentials
-const cashfree = new Cashfree({
-  mode: process.env.CASHFREE_MODE || 'sandbox', // 'sandbox' or 'production'
-});
+import crypto from 'crypto';
 
 /**
  * Generate Cashfree session token
  */
 export const createCashfreeOrder = async (orderData) => {
   try {
-    const response = await fetch('https://sandbox.cashfree.com/pg/orders', {
+    const apiUrl = process.env.CASHFREE_MODE === 'production' 
+      ? 'https://api.cashfree.com/pg/orders'
+      : 'https://sandbox.cashfree.com/pg/orders';
+
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -38,7 +37,6 @@ export const createCashfreeOrder = async (orderData) => {
  * Verify Cashfree payment signature
  */
 export const verifyCashfreeSignature = (orderId, orderAmount, signature) => {
-  const crypto = require('crypto');
   const body = orderId + orderAmount;
   const secretKey = process.env.CASHFREE_SECRET_KEY;
   
@@ -55,7 +53,11 @@ export const verifyCashfreeSignature = (orderId, orderAmount, signature) => {
  */
 export const getCashfreeOrder = async (orderId) => {
   try {
-    const response = await fetch(`https://sandbox.cashfree.com/pg/orders/${orderId}`, {
+    const apiUrl = process.env.CASHFREE_MODE === 'production'
+      ? `https://api.cashfree.com/pg/orders/${orderId}`
+      : `https://sandbox.cashfree.com/pg/orders/${orderId}`;
+
+    const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -82,7 +84,11 @@ export const getCashfreeOrder = async (orderId) => {
  */
 export const createCashfreeRefund = async (orderId, refundData) => {
   try {
-    const response = await fetch('https://sandbox.cashfree.com/pg/orders/${orderId}/refunds', {
+    const apiUrl = process.env.CASHFREE_MODE === 'production'
+      ? `https://api.cashfree.com/pg/orders/${orderId}/refunds`
+      : `https://sandbox.cashfree.com/pg/orders/${orderId}/refunds`;
+
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -104,5 +110,3 @@ export const createCashfreeRefund = async (orderId, refundData) => {
     throw error;
   }
 };
-
-export { cashfree };
