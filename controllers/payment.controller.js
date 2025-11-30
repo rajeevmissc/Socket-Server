@@ -649,81 +649,99 @@
 
 
 
-
-// controllers/payment.controller.cashfree.js
+// controllers/payment.controller.js
 import { Payment } from '../models/payment.model.js';
 import { generateOrderId, generateReceiptId } from '../utils/reference.util.js';
-import { createCashfreeOrder, getCashfreeOrder, createCashfreeRefund } from '../services/cashfree.service.js';
+import {
+  createCashfreeOrder,
+  getCashfreeOrder,
+  createCashfreeRefund,
+} from '../services/cashfree.service.js';
 
 /**
  * Create Cashfree Checkout Session
+ * Frontend sends: amount in paise (amount * 100)
+ * Cashfree needs: order_amount in rupees
+ * DB stores: amount in rupees
  */
 export const createCheckoutSession = async (req, res) => {
   try {
-    const { 
-      amount, 
+    const {
+      amount, // paise from frontend
       currency = 'INR',
       success_url,
-      cancel_url,
-      metadata = {}
+      cancel_url, // not used directly by Cashfree, we use return_url
+      metadata = {},
     } = req.body;
-    
-    // Generate order and receipt IDs
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid amount',
+      });
+    }
+
+    const baseUrl = 'https://www.getcompanion.in/wallet';
+
+    // rupees
+    const amountInRupees = amount / 100;
+
+    // Generate IDs
     const orderId = generateOrderId(req.user._id);
     const receipt = generateReceiptId('wallet');
-    
-    // Use production URLs or fallback
-    const baseUrl = 'https://www.getcompanion.in/wallet';
-    
-    // Create Cashfree order
+
     const orderData = {
       order_id: orderId,
-      order_amount: amount / 100, // Cashfree expects amount in rupees, not paise
-      order_currency: currency,
+      order_amount: amountInRupees,
+      order_currency: currency.toUpperCase(),
       customer_details: {
         customer_id: req.user._id.toString(),
         customer_name: `${req.user.firstName} ${req.user.lastName}`,
         customer_email: req.user.email,
-        customer_phone: req.user.phone || '9999999999'
+        customer_phone: req.user.phone || '9999999999',
       },
       order_meta: {
+        // User is redirected back here after payment
         return_url: success_url || `${baseUrl}/?order_id={order_id}`,
-        notify_url: `${process.env.BACKEND_URL || 'http://localhost:5002'}/api/webhooks/cashfree`,
-        payment_methods: 'cc,dc,upi,nb,wallet'
+        // Cashfree will call this for webhook
+        notify_url: `${
+          process.env.BACKEND_URL || 'http://localhost:5002'
+        }/api/webhooks/cashfree`,
+        payment_methods: 'cc,dc,upi,nb,wallet',
       },
-      order_note: `Wallet Recharge - ₹${amount / 100}`,
+      order_note: `Wallet Recharge - ₹${amountInRupees}`,
       order_tags: {
         userId: req.user._id.toString(),
         type: 'wallet_recharge',
         userEmail: req.user.email,
         userName: `${req.user.firstName} ${req.user.lastName}`,
-        ...metadata
-      }
+        ...metadata,
+      },
     };
-    
+
     const cashfreeOrder = await createCashfreeOrder(orderData);
-    
-    // Save payment record
+
+    // Save payment (amount in rupees)
     const payment = new Payment({
       userId: req.user._id,
       paymentId: cashfreeOrder.order_id,
       orderId: cashfreeOrder.order_id,
-      amount: amount / 100,
+      amount: amountInRupees,
       currency: currency.toUpperCase(),
       paymentMethod: 'Cashfree Checkout',
       paymentGateway: 'Cashfree',
-      description: `Wallet Recharge - ₹${amount / 100}`,
+      description: `Wallet Recharge - ₹${amountInRupees}`,
       receipt,
       customerInfo: {
         name: `${req.user.firstName} ${req.user.lastName}`,
         email: req.user.email,
-        phone: req.user.phone
+        phone: req.user.phone,
       },
       gatewayResponse: {
         orderId: cashfreeOrder.order_id,
         sessionId: cashfreeOrder.payment_session_id,
         url: cashfreeOrder.payment_link,
-        order_status: cashfreeOrder.order_status
+        order_status: cashfreeOrder.order_status,
       },
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
@@ -731,75 +749,72 @@ export const createCheckoutSession = async (req, res) => {
         userId: req.user._id.toString(),
         type: 'wallet_recharge',
         userEmail: req.user.email,
-        userName: `${req.user.firstName} ${req.user.lastName}`
-      }
+        userName: `${req.user.firstName} ${req.user.lastName}`,
+      },
     });
-    
+
     await payment.save();
-     
-    res.json({
+
+    return res.json({
       success: true,
       data: {
         sessionId: cashfreeOrder.payment_session_id,
         url: cashfreeOrder.payment_link,
         paymentId: cashfreeOrder.order_id,
         orderId: cashfreeOrder.order_id,
-        amount: amount / 100,
-        currency: currency.toUpperCase()
-      }
+        amount: amountInRupees,
+        currency: currency.toUpperCase(),
+      },
     });
-    
   } catch (error) {
     console.error('Error creating Cashfree checkout session:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: 'Failed to create checkout session',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
 
 /**
- * Verify Cashfree payment session
+ * Verify Cashfree payment (used by /verify-session/:sessionId)
+ * sessionId can be order_id or payment_session_id – we resolve via DB.
  */
 export const verifyPaymentSession = async (req, res) => {
   try {
     const { sessionId } = req.params;
-    
-    // Get order by sessionId (orderId in Cashfree)
-    const payment = await Payment.findOne({ 
+
+    const payment = await Payment.findOne({
       $or: [
         { paymentId: sessionId },
         { orderId: sessionId },
-        { 'gatewayResponse.sessionId': sessionId }
-      ]
+        { 'gatewayResponse.sessionId': sessionId },
+      ],
     });
-    
+
     if (!payment) {
       return res.status(404).json({
         success: false,
         error: 'Payment record not found',
-        code: 'PAYMENT_NOT_FOUND'
+        code: 'PAYMENT_NOT_FOUND',
       });
     }
-    
-    // Fetch order status from Cashfree
+
     const cashfreeOrder = await getCashfreeOrder(payment.orderId);
-    
+
     if (cashfreeOrder.order_status === 'PAID') {
       payment.status = 'captured';
       payment.capturedAt = new Date();
       payment.gatewayResponse = {
-        ...payment.gatewayResponse,
+        ...(payment.gatewayResponse || {}),
         cf_order_id: cashfreeOrder.cf_order_id,
         order_status: cashfreeOrder.order_status,
         payment_method: cashfreeOrder.payment_method,
-        payment_time: cashfreeOrder.payment_time
+        payment_time: cashfreeOrder.payment_time,
       };
-      
       await payment.save();
-      
-      res.json({
+
+      return res.json({
         success: true,
         data: {
           sessionId,
@@ -808,91 +823,94 @@ export const verifyPaymentSession = async (req, res) => {
           amount: payment.amount,
           currency: payment.currency,
           capturedAt: payment.capturedAt,
-          message: 'Payment verified successfully'
-        }
+          message: 'Payment verified successfully',
+        },
       });
-    } else if (cashfreeOrder.order_status === 'ACTIVE') {
-      res.status(400).json({
+    }
+
+    if (cashfreeOrder.order_status === 'ACTIVE') {
+      return res.status(400).json({
         success: false,
         error: 'Payment pending',
         code: 'PAYMENT_PENDING',
-        status: cashfreeOrder.order_status
-      });
-    } else {
-      payment.status = 'failed';
-      payment.failureReason = `Payment status: ${cashfreeOrder.order_status}`;
-      await payment.save();
-      
-      res.status(400).json({
-        success: false,
-        error: 'Payment not completed',
-        code: 'PAYMENT_INCOMPLETE',
-        status: cashfreeOrder.order_status
+        status: cashfreeOrder.order_status,
       });
     }
-    
+
+    // Any other status -> failed
+    payment.status = 'failed';
+    payment.failureReason = `Payment status: ${cashfreeOrder.order_status}`;
+    await payment.save();
+
+    return res.status(400).json({
+      success: false,
+      error: 'Payment not completed',
+      code: 'PAYMENT_INCOMPLETE',
+      status: cashfreeOrder.order_status,
+    });
   } catch (error) {
     console.error('Error verifying Cashfree payment:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      error: 'Failed to verify payment'
+      error: 'Failed to verify payment',
     });
   }
 };
 
 /**
- * Initiate payment (backward compatibility)
+ * Backward-compatible initiatePayment
+ * (same route, now internally calls Cashfree createCheckoutSession)
  */
 export const initiatePayment = async (req, res) => {
   try {
     const { amount, paymentMethod, type = 'wallet_recharge' } = req.body;
-    
+
     req.body = {
       amount: amount * 100,
       currency: 'INR',
-      metadata: { type, originalPaymentMethod: paymentMethod }
+      metadata: { type, originalPaymentMethod: paymentMethod },
     };
-    
+
     return await createCheckoutSession(req, res);
-    
   } catch (error) {
     console.error('Error initiating payment:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: 'Failed to initiate payment',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
 };
 
 /**
- * Verify payment (backward compatibility)
+ * Backward-compatible verifyPayment
  */
 export const verifyPayment = async (req, res) => {
   try {
     const { order_id, session_id } = req.body;
-    
     const sessionIdToUse = session_id || order_id;
-    
-    if (sessionIdToUse) {
-      req.params.sessionId = sessionIdToUse;
-      return await verifyPaymentSession(req, res);
-    } else {
-      res.status(400).json({
+
+    if (!sessionIdToUse) {
+      return res.status(400).json({
         success: false,
         error: 'Missing payment verification data',
-        code: 'INVALID_REQUEST'
+        code: 'INVALID_REQUEST',
       });
     }
-    
+
+    req.params.sessionId = sessionIdToUse;
+    return await verifyPaymentSession(req, res);
   } catch (error) {
     console.error('Error verifying payment:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      error: 'Failed to verify payment'
+      error: 'Failed to verify payment',
     });
   }
 };
+
+// 🔽 The rest of your functions are unchanged logic-wise,
+// just re-used with Cashfree payments stored in the same Payment model.
 
 /**
  * Get payment details by payment ID
@@ -900,30 +918,29 @@ export const verifyPayment = async (req, res) => {
 export const getPaymentDetails = async (req, res) => {
   try {
     const { paymentId } = req.params;
-    
-    const payment = await Payment.findOne({ 
+
+    const payment = await Payment.findOne({
       paymentId,
-      userId: req.user._id 
+      userId: req.user._id,
     });
-    
+
     if (!payment) {
       return res.status(404).json({
         success: false,
         error: 'Payment not found',
-        code: 'PAYMENT_NOT_FOUND'
+        code: 'PAYMENT_NOT_FOUND',
       });
     }
-    
-    res.json({
+
+    return res.json({
       success: true,
-      data: payment.getSummary()
+      data: payment.getSummary(),
     });
-    
   } catch (error) {
     console.error('Error fetching payment details:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      error: 'Failed to fetch payment details'
+      error: 'Failed to fetch payment details',
     });
   }
 };
@@ -938,23 +955,24 @@ export const getUserPayments = async (req, res) => {
     const status = req.query.status;
     const paymentMethod = req.query.paymentMethod;
     const skip = (page - 1) * limit;
-    
+
     const query = { userId: req.user._id };
     if (status) query.status = status;
     if (paymentMethod) query.paymentMethod = paymentMethod;
-    
+
     const payments = await Payment.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .lean();
-    
+
     const total = await Payment.countDocuments(query);
-    
-    res.json({
+    const totalPages = Math.ceil(total / limit);
+
+    return res.json({
       success: true,
       data: {
-        payments: payments.map(payment => ({
+        payments: payments.map((payment) => ({
           paymentId: payment.paymentId,
           orderId: payment.orderId,
           amount: payment.amount,
@@ -964,24 +982,23 @@ export const getUserPayments = async (req, res) => {
           description: payment.description,
           createdAt: payment.createdAt,
           capturedAt: payment.capturedAt,
-          isSuccessful: ['authorized', 'captured'].includes(payment.status)
+          isSuccessful: ['authorized', 'captured'].includes(payment.status),
         })),
         pagination: {
           page,
           limit,
           total,
-          totalPages: Math.ceil(total / limit),
-          hasNext: page < Math.ceil(total / limit),
-          hasPrev: page > 1
-        }
-      }
+          totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1,
+        },
+      },
     });
-    
   } catch (error) {
     console.error('Error fetching user payments:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      error: 'Failed to fetch payments'
+      error: 'Failed to fetch payments',
     });
   }
 };
@@ -992,52 +1009,54 @@ export const getUserPayments = async (req, res) => {
 export const retryPayment = async (req, res) => {
   try {
     const { paymentId } = req.params;
-    
-    const payment = await Payment.findOne({ 
+
+    const payment = await Payment.findOne({
       paymentId,
       userId: req.user._id,
-      status: 'failed'
+      status: 'failed',
     });
-    
+
     if (!payment) {
       return res.status(404).json({
         success: false,
         error: 'Failed payment not found',
-        code: 'PAYMENT_NOT_FOUND'
+        code: 'PAYMENT_NOT_FOUND',
       });
     }
-    
+
     const newOrderId = generateOrderId(req.user._id);
     const receipt = generateReceiptId('retry');
     const baseUrl = 'https://www.getcompanion.in/wallet';
-    
+
     const orderData = {
       order_id: newOrderId,
-      order_amount: payment.amount,
+      order_amount: payment.amount, // already rupees
       order_currency: payment.currency,
       customer_details: {
         customer_id: req.user._id.toString(),
         customer_name: payment.customerInfo.name,
         customer_email: payment.customerInfo.email,
-        customer_phone: payment.customerInfo.phone || '9999999999'
+        customer_phone: payment.customerInfo.phone || '9999999999',
       },
       order_meta: {
         return_url: `${baseUrl}/?order_id={order_id}`,
-        notify_url: `${process.env.BACKEND_URL || 'http://localhost:5002'}/api/webhooks/cashfree`,
-        payment_methods: 'cc,dc,upi,nb,wallet'
+        notify_url: `${
+          process.env.BACKEND_URL || 'http://localhost:5002'
+        }/api/webhooks/cashfree`,
+        payment_methods: 'cc,dc,upi,nb,wallet',
       },
       order_note: `Retry: ${payment.description}`,
       order_tags: {
         userId: req.user._id.toString(),
         type: 'wallet_recharge',
         retryOf: payment.paymentId,
-        attempt: payment.attempts + 1
-      }
+        attempt: payment.attempts + 1,
+      },
     };
-    
+
     const cashfreeOrder = await createCashfreeOrder(orderData);
-    
-    const retryPayment = new Payment({
+
+    const retryPaymentDoc = new Payment({
       userId: req.user._id,
       paymentId: cashfreeOrder.order_id,
       orderId: cashfreeOrder.order_id,
@@ -1051,7 +1070,7 @@ export const retryPayment = async (req, res) => {
       gatewayResponse: {
         orderId: cashfreeOrder.order_id,
         sessionId: cashfreeOrder.payment_session_id,
-        url: cashfreeOrder.payment_link
+        url: cashfreeOrder.payment_link,
       },
       attempts: payment.attempts + 1,
       ipAddress: req.ip,
@@ -1059,13 +1078,13 @@ export const retryPayment = async (req, res) => {
       notes: {
         ...payment.notes,
         retryOf: payment.paymentId,
-        attempt: payment.attempts + 1
-      }
+        attempt: payment.attempts + 1,
+      },
     });
-    
-    await retryPayment.save();
-    
-    res.json({
+
+    await retryPaymentDoc.save();
+
+    return res.json({
       success: true,
       data: {
         sessionId: cashfreeOrder.payment_session_id,
@@ -1073,15 +1092,14 @@ export const retryPayment = async (req, res) => {
         paymentId: cashfreeOrder.order_id,
         orderId: cashfreeOrder.order_id,
         amount: payment.amount,
-        currency: payment.currency
-      }
+        currency: payment.currency,
+      },
     });
-    
   } catch (error) {
     console.error('Error retrying payment:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      error: 'Failed to retry payment'
+      error: 'Failed to retry payment',
     });
   }
 };
@@ -1092,118 +1110,40 @@ export const retryPayment = async (req, res) => {
 export const cancelPayment = async (req, res) => {
   try {
     const { paymentId } = req.params;
-    
-    const payment = await Payment.findOne({ 
+
+    const payment = await Payment.findOne({
       paymentId,
       userId: req.user._id,
-      status: 'created'
+      status: 'created',
     });
-    
+
     if (!payment) {
       return res.status(404).json({
         success: false,
         error: 'Pending payment not found',
-        code: 'PAYMENT_NOT_FOUND'
+        code: 'PAYMENT_NOT_FOUND',
       });
     }
-    
-    // Cashfree doesn't require explicit cancellation for pending orders
+
+    // Cashfree usually does not require explicit cancel; we just mark ours
     payment.status = 'cancelled';
     payment.cancelledAt = new Date();
     await payment.save();
-       
-    res.json({
+
+    return res.json({
       success: true,
       data: {
         paymentId,
         status: 'cancelled',
         cancelledAt: payment.cancelledAt,
-        message: 'Payment cancelled successfully'
-      }
+        message: 'Payment cancelled successfully',
+      },
     });
-    
   } catch (error) {
     console.error('Error cancelling payment:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      error: 'Failed to cancel payment'
-    });
-  }
-};
-
-/**
- * Initiate refund for captured payment
- */
-export const initiateRefund = async (req, res) => {
-  try {
-    const { paymentId } = req.params;
-    const { amount, reason } = req.body;
-    
-    const payment = await Payment.findOne({ 
-      paymentId,
-      userId: req.user._id,
-      status: 'captured'
-    });
-    
-    if (!payment) {
-      return res.status(404).json({
-        success: false,
-        error: 'Captured payment not found',
-        code: 'PAYMENT_NOT_FOUND'
-      });
-    }
-    
-    if (!payment.canRefund()) {
-      return res.status(400).json({
-        success: false,
-        error: 'Payment cannot be refunded',
-        code: 'REFUND_NOT_ALLOWED'
-      });
-    }
-    
-    const refundAmount = amount || payment.refundableAmount;
-    
-    if (refundAmount > payment.refundableAmount) {
-      return res.status(400).json({
-        success: false,
-        error: 'Refund amount exceeds refundable amount',
-        code: 'INVALID_REFUND_AMOUNT',
-        maxRefundable: payment.refundableAmount
-      });
-    }
-    
-    const refundData = {
-      refund_amount: refundAmount,
-      refund_id: `refund_${Date.now()}`,
-      refund_note: reason || 'Customer request'
-    };
-    
-    const refund = await createCashfreeRefund(payment.orderId, refundData);
-    
-    await payment.addRefund({
-      refundId: refund.cf_refund_id || refund.refund_id,
-      amount: refundAmount,
-      reason: reason || 'Customer request',
-      status: 'processed',
-      processedAt: new Date()
-    });
-
-    res.json({
-      success: true,
-      data: {
-        refundId: refund.cf_refund_id || refund.refund_id,
-        paymentId,
-        refundAmount,
-        status: 'processed',
-        message: 'Refund processed successfully'
-      }
-    });
-    
-  } catch (error) {
-    console.error('Error initiating refund:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to process refund'
+      error: 'Failed to cancel payment',
     });
   }
 };
@@ -1215,29 +1155,28 @@ export const getPaymentStats = async (req, res) => {
   try {
     const { period = '30' } = req.query;
     const daysBack = parseInt(period);
-    
+
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - daysBack);
-    
+
     const stats = await Payment.getStats({
       userId: req.user._id,
       startDate,
-      endDate: new Date()
+      endDate: new Date(),
     });
-    
-    res.json({
+
+    return res.json({
       success: true,
       data: {
         period: `${daysBack} days`,
-        statistics: stats
-      }
+        statistics: stats,
+      },
     });
-    
   } catch (error) {
     console.error('Error fetching payment stats:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      error: 'Failed to fetch payment statistics'
+      error: 'Failed to fetch payment statistics',
     });
   }
 };
@@ -1252,6 +1191,7 @@ export default {
   retryPayment,
   cancelPayment,
   initiateRefund,
-  getPaymentStats
+  getPaymentStats,
 };
+
 
