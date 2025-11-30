@@ -707,7 +707,7 @@ export const createCheckoutSession = async (req, res) => {
         notify_url: `${
           process.env.BACKEND_URL || 'http://localhost:5002'
         }/api/webhooks/cashfree`,
-        payment_methods: 'cc,dc,upi,nb,wallet',
+        payment_methods: 'cc,dc,upi,nb',
       },
       order_note: `Wallet Recharge - ₹${amountInRupees}`,
       order_tags: {
@@ -1130,7 +1130,7 @@ export const retryPayment = async (req, res) => {
         notify_url: `${
           process.env.BACKEND_URL || 'http://localhost:5002'
         }/api/webhooks/cashfree`,
-        payment_methods: 'cc,dc,upi,nb,wallet',
+        payment_methods: 'cc,dc,upi,nb',
       },
       order_note: `Retry: ${payment.description}`,
       order_tags: {
@@ -1280,6 +1280,7 @@ export default {
   initiateRefund,
   getPaymentStats,
 };
+
 
 
 
