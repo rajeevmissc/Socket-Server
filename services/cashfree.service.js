@@ -9,7 +9,7 @@ export const createCashfreeOrder = async (orderData) => {
     const apiUrl = process.env.CASHFREE_MODE === 'production' 
       ? 'https://api.cashfree.com/pg/orders'
       : 'https://sandbox.cashfree.com/pg/orders';
-
+    consoel.log('crede-----------',process.env.CASHFREE_SECRET_KEY,process.env.CASHFREE_APP_ID); 
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
