@@ -72,75 +72,6 @@ export const getAllProvidersPersonalInfo = async (req, res) => {
   }
 };
 
-
-// @desc    Get all providers with filters and pagination
-// @route   GET /api/providers
-// @access  Public
-// export const getAllProviders = async (req, res) => {
-//   try {
-//     const {
-//       page = 1,
-//       limit = 100,
-//       category,
-//       city,
-//       service,
-//       minRating,
-//       sortBy = '-ratings.overall'
-//     } = req.query;
-
-//     // Build query
-//     const query = {};
-    
-//     if (category) {
-//       query['services.category'] = category;
-//     }
-    
-//     if (city) {
-//       query['address.city'] = new RegExp(city, 'i');
-//     }
-    
-//     if (service) {
-//       query.$or = [
-//         { 'services.primary': new RegExp(service, 'i') },
-//         { 'services.secondary': new RegExp(service, 'i') }
-//       ];
-//     }
-    
-//     if (minRating) {
-//       query['ratings.overall'] = { $gte: parseFloat(minRating) };
-//     }
-
-//     // Execute query with pagination
-//     const providers = await Provider.find(query)
-//       .sort(sortBy)
-//       .limit(limit * 1)
-//       .skip((page - 1) * limit)
-//       .select('-__v');
-
-//     // Get total count for pagination
-//     const count = await Provider.countDocuments(query);
-
-//     res.status(200).json({
-//       success: true,
-//       count: providers.length,
-//       total: count,
-//       totalPages: Math.ceil(count / limit),
-//       currentPage: parseInt(page),
-//       data: providers
-//     });
-
-//   } catch (error) {
-//     console.error('Error fetching providers:', error);
-//     res.status(500).json({ 
-//       success: false,
-//       message: 'Server error while fetching providers',
-//       error: error.message 
-//     });
-//   }
-// };
-
-
-
 export const getAllProviders = async (req, res) => {
   try {
     const {
@@ -174,25 +105,23 @@ export const getAllProviders = async (req, res) => {
       query["ratings.overall"] = { $gte: parseFloat(minRating) };
     }
 
-    // ------------ PRESENCE PRIORITY MAP ------------
-    const presencePriority = {
-      online: 1,
-      recently_active: 2,
-      available: 3,
-      busy: 4,
-      offline: 5
-    };
-
-    // ------------ AGGREGATION WITH SORTING ------------
-
     const skip = (page - 1) * limit;
 
     const providers = await Provider.aggregate([
       { $match: query },
 
-      // add a virtual field "presenceOrder"
+      // Add Gender Priority + Presence Priority
       {
         $addFields: {
+          genderOrder: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$personalInfo.gender", "Female"] }, then: 1 },
+                { case: { $eq: ["$personalInfo.gender", "Male"] }, then: 2 }
+              ],
+              default: 3
+            }
+          },
           presenceOrder: {
             $switch: {
               branches: [
@@ -201,17 +130,18 @@ export const getAllProviders = async (req, res) => {
                 { case: { $eq: ["$presence.availabilityStatus", "available"] }, then: 3 },
                 { case: { $eq: ["$presence.availabilityStatus", "busy"] }, then: 4 }
               ],
-              default: 5 // offline
+              default: 5
             }
           }
         }
       },
 
-      // sort using presence first + user selected sortBy
+      // Female First → Presence priority → Rating
       {
         $sort: {
+          genderOrder: 1,
           presenceOrder: 1,
-          "ratings.overall": -1 // fallback sort
+          "ratings.overall": -1
         }
       },
 
@@ -221,6 +151,7 @@ export const getAllProviders = async (req, res) => {
       {
         $project: {
           __v: 0,
+          genderOrder: 0,
           presenceOrder: 0
         }
       }
@@ -362,6 +293,7 @@ export const deleteProvider = async (req, res) => {
     });
   }
 };
+
 
 
 
