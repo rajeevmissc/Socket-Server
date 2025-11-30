@@ -9,26 +9,36 @@ export const createCashfreeOrder = async (orderData) => {
     const apiUrl = process.env.CASHFREE_MODE === 'production' 
       ? 'https://api.cashfree.com/pg/orders'
       : 'https://sandbox.cashfree.com/pg/orders';
-    console.log('crede-----------',process.env.CASHFREE_SECRET_KEY,process.env.CASHFREE_APP_ID); 
+
+    // ⚠️ REMOVED CREDENTIAL LOGGING FOR SECURITY
+    // DO NOT LOG CREDENTIALS IN PRODUCTION!
+    
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-client-id': process.env.CASHFREE_APP_ID,
         'x-client-secret': process.env.CASHFREE_SECRET_KEY,
-        'x-api-version': '2025-01-01'
+        'x-api-version': '2023-08-01'  // Changed from 2025-01-01 to 2023-08-01
       },
       body: JSON.stringify(orderData)
     });
 
     if (!response.ok) {
       const error = await response.json();
+      console.error('Cashfree API Error:', {
+        status: response.status,
+        error: error.message
+      });
       throw new Error(error.message || 'Failed to create Cashfree order');
     }
 
-    return await response.json();
+    const result = await response.json();
+    console.log('✅ Cashfree order created:', result.order_id);
+    return result;
+    
   } catch (error) {
-    console.error('Cashfree order creation error:', error);
+    console.error('Cashfree order creation error:', error.message);
     throw error;
   }
 };
@@ -74,7 +84,7 @@ export const getCashfreeOrder = async (orderId) => {
 
     return await response.json();
   } catch (error) {
-    console.error('Cashfree order fetch error:', error);
+    console.error('Cashfree order fetch error:', error.message);
     throw error;
   }
 };
@@ -106,7 +116,7 @@ export const createCashfreeRefund = async (orderId, refundData) => {
 
     return await response.json();
   } catch (error) {
-    console.error('Cashfree refund error:', error);
+    console.error('Cashfree refund error:', error.message);
     throw error;
   }
 };
