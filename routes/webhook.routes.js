@@ -188,26 +188,29 @@ router.post('/cashfree', rawBodyParser, async (req, res) => {
     }
 
     const event = JSON.parse(rawBody);
-    const type = event?.type || event?.event;
+    const eventType = event?.type || event?.event || event?.data?.event;
 
-    console.log('📩 Cashfree Webhook Received:', type);
+console.log("📩 Incoming Cashfree Event:", eventType);
 
-    switch (type) {
-      case 'PAYMENT_SUCCESS_WEBHOOK':
-        await handlePaymentSuccess(event.data);
-        break;
+switch (eventType) {
 
-      case 'PAYMENT_FAILED_WEBHOOK':
-        await handlePaymentFailed(event.data);
-        break;
+  case "order.paid":
+    await handlePaymentSuccess(event.data);
+    break;
 
-      case 'REFUND_STATUS_WEBHOOK':
-        await handleRefund(event.data);
-        break;
+  case "order.failed":
+    await handlePaymentFailed(event.data);
+    break;
 
-      default:
-        console.log('ℹ Unhandled Cashfree Webhook:', type);
-    }
+  case "refund.processed":
+  case "refund.initiated":
+    await handleRefund(event.data);
+    break;
+
+  default:
+    console.log("ℹ Unhandled Cashfree Event:", eventType);
+}
+
 
     return res.json({ success: true });
   } catch (err) {
@@ -313,3 +316,4 @@ const handleRefund = async (refundData) => {
 };
 
 export default router;
+
