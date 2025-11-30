@@ -285,6 +285,14 @@ app.options("*", cors());
 
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
+
+/* ---------------------------------------------------------
+   ✅ 1. CASHFREE WEBHOOK → RAW BODY PARSER (VERY IMPORTANT)
+--------------------------------------------------------- */
+app.use(
+  "/api/webhooks/cashfree",
+  express.raw({ type: "application/json" })
+);
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 app.use(helmet({ contentSecurityPolicy: false }));
