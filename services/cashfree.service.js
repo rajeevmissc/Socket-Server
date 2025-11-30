@@ -1,117 +1,108 @@
 // services/cashfree.service.js
-import axios from "axios";
-import crypto from "crypto";
+import { Cashfree } from 'cashfree-pg-sdk-javascript';
 
-const CF_APP_ID = process.env.CASHFREE_APP_ID;
-const CF_SECRET = process.env.CASHFREE_SECRET_KEY;
-
-const CF_BASE = "https://api.cashfree.com/pg/orders";
+// Initialize Cashfree with your credentials
+const cashfree = new Cashfree({
+  mode: process.env.CASHFREE_MODE || 'sandbox', // 'sandbox' or 'production'
+});
 
 /**
- * Create Cashfree Checkout Session
+ * Generate Cashfree session token
  */
-export const createCashfreeCheckout = async ({ amount, currency, user, metadata }) => {
+export const createCashfreeOrder = async (orderData) => {
   try {
-    const orderId = `order_${Date.now()}`;
-
-    const body = {
-      order_id: orderId,
-      order_amount: amount / 100,
-      order_currency: currency.toUpperCase(),
-      customer_details: {
-        customer_id: user._id.toString(),
-        customer_email: user.email,
-        customer_phone: user.phone || "9999999999",
-      },
-      order_meta: {
-        return_url: `${process.env.FRONTEND_URL}/wallet?order_id={order_id}`
-      },
-      metadata,
-    };
-
-    const response = await axios.post(CF_BASE, body, {
+    const response = await fetch('https://sandbox.cashfree.com/pg/orders', {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        "x-client-id": CF_APP_ID,
-        "x-client-secret": CF_SECRET,
+        'Content-Type': 'application/json',
+        'x-client-id': process.env.CASHFREE_APP_ID,
+        'x-client-secret': process.env.CASHFREE_SECRET_KEY,
+        'x-api-version': '2023-08-01'
       },
+      body: JSON.stringify(orderData)
     });
 
-    return {
-      success: true,
-      data: {
-        sessionId: response.data.payment_session_id,
-        orderId,
-        paymentLink: `https://payments.cashfree.com/pg/${response.data.payment_session_id}`
-      },
-    };
-  } catch (err) {
-    console.error("Cashfree Error:", err.response?.data || err.message);
-    return { success: false, error: err.message };
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to create Cashfree order');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Cashfree order creation error:', error);
+    throw error;
   }
 };
 
-
 /**
- * Verify order
+ * Verify Cashfree payment signature
  */
-export const verifyCashfreeOrder = async (orderId) => {
-  try {
-    const response = await axios.get(`${CF_BASE}/${orderId}`, {
-      headers: {
-        "x-client-id": CF_APP_ID,
-        "x-client-secret": CF_SECRET,
-      },
-    });
-
-    return {
-      success: true,
-      status: response.data.order_status,
-      data: response.data,
-    };
-  } catch (err) {
-    return { success: false, error: err.message };
-  }
+export const verifyCashfreeSignature = (orderId, orderAmount, signature) => {
+  const crypto = require('crypto');
+  const body = orderId + orderAmount;
+  const secretKey = process.env.CASHFREE_SECRET_KEY;
+  
+  const expectedSignature = crypto
+    .createHmac('sha256', secretKey)
+    .update(body)
+    .digest('base64');
+  
+  return signature === expectedSignature;
 };
 
-
 /**
- * Refunds (wallet refund logic)
+ * Get order details from Cashfree
  */
-export const cashfreeRefund = async (orderId, amount, reason) => {
+export const getCashfreeOrder = async (orderId) => {
   try {
-    const body = {
-      refund_amount: amount,
-      refund_note: reason || "Refund",
-      refund_id: `refund_${Date.now()}`,
-    };
-
-    const response = await axios.post(
-      `${CF_BASE}/${orderId}/refunds`,
-      body,
-      {
-        headers: {
-          "x-client-id": CF_APP_ID,
-          "x-client-secret": CF_SECRET,
-        },
+    const response = await fetch(`https://sandbox.cashfree.com/pg/orders/${orderId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-client-id': process.env.CASHFREE_APP_ID,
+        'x-client-secret': process.env.CASHFREE_SECRET_KEY,
+        'x-api-version': '2023-08-01'
       }
-    );
+    });
 
-    return { success: true, data: response.data };
-  } catch (err) {
-    return { success: false, error: err.message };
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to fetch order');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Cashfree order fetch error:', error);
+    throw error;
   }
 };
 
-
 /**
- * Verify Cashfree Webhook Signature
+ * Process refund via Cashfree
  */
-export const validateCashfreeWebhook = (rawBody, signature) => {
-  const computed = crypto
-    .createHmac("sha256", CF_SECRET)
-    .update(rawBody)
-    .digest("base64");
+export const createCashfreeRefund = async (orderId, refundData) => {
+  try {
+    const response = await fetch('https://sandbox.cashfree.com/pg/orders/${orderId}/refunds', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-client-id': process.env.CASHFREE_APP_ID,
+        'x-client-secret': process.env.CASHFREE_SECRET_KEY,
+        'x-api-version': '2023-08-01'
+      },
+      body: JSON.stringify(refundData)
+    });
 
-  return computed === signature;
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to create refund');
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Cashfree refund error:', error);
+    throw error;
+  }
 };
+
+export { cashfree };
