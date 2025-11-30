@@ -1190,8 +1190,9 @@ export default {
   getUserPayments,
   retryPayment,
   cancelPayment,
-  initiateRefund,
+  initiateRefund: initiateRefundCashfree,
   getPaymentStats,
 };
+
 
 
