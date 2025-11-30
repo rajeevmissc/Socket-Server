@@ -574,13 +574,12 @@
 
 
 
-
 // middleware/wallet.middleware.js
 import { Wallet } from "../models/wallet.model.js";
 import { resetLimitsIfNeeded, validateSpendingLimits } from "../utils/limits.util.js";
 
 /* ------------------------------------------------------------
-   1️⃣ Ensure Wallet Exists (Auto-create on first login)
+   1️⃣ Ensure Wallet Exists
 ------------------------------------------------------------ */
 export const ensureWallet = async (req, res, next) => {
   try {
@@ -593,7 +592,6 @@ export const ensureWallet = async (req, res, next) => {
 
     let wallet = await Wallet.findOne({ userId: req.user._id });
 
-    // Auto-create wallet if missing
     if (!wallet) {
       wallet = await Wallet.create({
         userId: req.user._id,
@@ -607,9 +605,10 @@ export const ensureWallet = async (req, res, next) => {
 
     await resetLimitsIfNeeded(wallet);
     req.wallet = wallet;
+
     next();
   } catch (error) {
-    console.error("❌ ensureWallet error:", error);
+    console.error("Error in ensureWallet:", error);
     res.status(500).json({
       success: false,
       error: "Failed to initialize wallet",
@@ -618,7 +617,7 @@ export const ensureWallet = async (req, res, next) => {
 };
 
 /* ------------------------------------------------------------
-   2️⃣ Check wallet active & not blocked
+   2️⃣ Check wallet active & unblock status
 ------------------------------------------------------------ */
 export const checkWalletStatus = (req, res, next) => {
   try {
@@ -632,7 +631,7 @@ export const checkWalletStatus = (req, res, next) => {
     if (!req.wallet.isActive) {
       return res.status(403).json({
         success: false,
-        error: "Wallet is currently inactive",
+        error: "Wallet is inactive",
         code: "WALLET_INACTIVE",
       });
     }
@@ -640,16 +639,15 @@ export const checkWalletStatus = (req, res, next) => {
     if (req.wallet.isBlocked) {
       return res.status(403).json({
         success: false,
-        error: "Wallet is currently blocked",
+        error: "Wallet is blocked",
         code: "WALLET_BLOCKED",
         reason: req.wallet.blockedReason,
-        blockedAt: req.wallet.blockedAt,
       });
     }
 
     next();
   } catch (error) {
-    console.error("❌ checkWalletStatus error:", error);
+    console.error("Error in checkWalletStatus:", error);
     res.status(500).json({
       success: false,
       error: "Failed to check wallet status",
@@ -658,7 +656,7 @@ export const checkWalletStatus = (req, res, next) => {
 };
 
 /* ------------------------------------------------------------
-   3️⃣ Spending validation (for deductions)
+   3️⃣ Validate spending
 ------------------------------------------------------------ */
 export const validateSpending = (req, res, next) => {
   try {
@@ -686,7 +684,7 @@ export const validateSpending = (req, res, next) => {
     req.spendingValidation = validation;
     next();
   } catch (error) {
-    console.error("❌ validateSpending error:", error);
+    console.error("Error in validateSpending:", error);
     res.status(500).json({
       success: false,
       error: "Failed to validate spending",
@@ -695,63 +693,52 @@ export const validateSpending = (req, res, next) => {
 };
 
 /* ------------------------------------------------------------
-   4️⃣ Check minimum balance (used for call/booking)
+   4️⃣ Minimum Balance Check
 ------------------------------------------------------------ */
 export const checkMinimumBalance = (minBalance = 0) => {
   return (req, res, next) => {
     try {
-      if (!req.wallet) {
-        return res.status(500).json({
-          success: false,
-          error: "Wallet not initialized",
-        });
-      }
-
       if (req.wallet.balance < minBalance) {
         return res.status(400).json({
           success: false,
           error: `Minimum balance of ₹${minBalance} required`,
-          code: "MIN_BALANCE_REQUIRED",
-          currentBalance: req.wallet.balance,
-          requiredBalance: minBalance,
         });
       }
 
       next();
     } catch (error) {
-      console.error("❌ checkMinimumBalance error:", error);
+      console.error("Error in checkMinimumBalance:", error);
       res.status(500).json({
         success: false,
-        error: "Failed to check minimum balance",
+        error: "Failed to check balance",
       });
     }
   };
 };
 
 /* ------------------------------------------------------------
-   5️⃣ Log operations (audit)
+   5️⃣ Log wallet operations
 ------------------------------------------------------------ */
-export const logWalletOperation = (operation) => {
-  return (req, res, next) => {
-    req.walletOperation = {
-      operation,
-      userId: req.user?._id,
-      walletId: req.wallet?._id,
-      timestamp: new Date(),
-      ip: req.ip,
-      userAgent: req.get("User-Agent"),
-      data: { ...req.body },
-    };
-
-    delete req.walletOperation.data.password;
-    delete req.walletOperation.data.pin;
-
-    next();
+export const logWalletOperation = (operation) => (req, res, next) => {
+  req.walletOperation = {
+    operation,
+    userId: req.user?._id,
+    walletId: req.wallet?._id,
+    timestamp: new Date(),
+    ip: req.ip,
+    userAgent: req.get("User-Agent"),
+    body: { ...req.body },
   };
+
+  delete req.walletOperation.body.password;
+  delete req.walletOperation.body.pin;
+
+  next();
 };
 
 /* ------------------------------------------------------------
-   6️⃣ Only one validation for recharge: amount > 0
+   ❌ 6️⃣ REMOVE MIN/MAX VALIDATION COMPLETELY  
+   ✔ Only check amount > 0
 ------------------------------------------------------------ */
 export const validateTransactionLimits = () => {
   return (req, res, next) => {
@@ -768,7 +755,7 @@ export const validateTransactionLimits = () => {
 
       next();
     } catch (error) {
-      console.error("❌ validateTransactionLimits error:", error);
+      console.error("Error in validateTransactionLimits:", error);
       res.status(500).json({
         success: false,
         error: "Failed to validate amount",
@@ -778,21 +765,17 @@ export const validateTransactionLimits = () => {
 };
 
 /* ------------------------------------------------------------
-   7️⃣ Rate limiter per user
+   7️⃣ Rate Limiter
 ------------------------------------------------------------ */
-export const walletRateLimit = ({
-  windowMs = 60_000,
-  max = 10,
-  operation = "wallet_op",
-} = {}) => {
+export const walletRateLimit = ({ windowMs = 60000, max = 10 } = {}) => {
   const requestCounts = new Map();
 
   return (req, res, next) => {
     try {
+      const id = req.user._id.toString();
       const now = Date.now();
-      const key = `${req.user._id}:${operation}`;
 
-      let entry = requestCounts.get(key) || {
+      let entry = requestCounts.get(id) || {
         count: 0,
         resetTime: now + windowMs,
       };
@@ -805,43 +788,34 @@ export const walletRateLimit = ({
         return res.status(429).json({
           success: false,
           error: "Rate limit exceeded",
-          retryAfter: Math.ceil((entry.resetTime - now) / 1000),
         });
       }
 
       entry.count++;
-      requestCounts.set(key, entry);
+      requestCounts.set(id, entry);
 
       next();
     } catch (error) {
-      console.error("❌ walletRateLimit error:", error);
+      console.error("Rate limit error:", error);
       next();
     }
   };
 };
 
 /* ------------------------------------------------------------
-   8️⃣ Required-field validator (ES6 clean)
+   8️⃣ Field Validation (ES6)
 ------------------------------------------------------------ */
-export const validateWalletRequest = (required = []) => {
+export const validateWalletRequest = (requiredFields = []) => {
   return (req, res, next) => {
     try {
       const errors = [];
 
-      for (const field of required) {
-        if (
-          req.body[field] === undefined ||
-          req.body[field] === null ||
-          req.body[field] === ""
-        ) {
-          errors.push(`Field '${field}' is required`);
-        }
+      for (const f of requiredFields) {
+        if (!req.body[f]) errors.push(`Field '${f}' is required`);
       }
 
-      if (req.body.amount !== undefined) {
-        if (typeof req.body.amount !== "number" || req.body.amount <= 0) {
-          errors.push("Amount must be greater than 0");
-        }
+      if (req.body.amount !== undefined && req.body.amount <= 0) {
+        errors.push("Amount must be greater than 0");
       }
 
       const validMethods = [
@@ -861,7 +835,9 @@ export const validateWalletRequest = (required = []) => {
         req.body.paymentMethod &&
         !validMethods.includes(req.body.paymentMethod)
       ) {
-        errors.push(`Payment method must be one of: ${validMethods.join(", ")}`);
+        errors.push(
+          `Payment method must be one of: ${validMethods.join(", ")}`
+        );
       }
 
       if (errors.length) {
@@ -874,7 +850,7 @@ export const validateWalletRequest = (required = []) => {
 
       next();
     } catch (error) {
-      console.error("❌ validateWalletRequest error:", error);
+      console.error("validateWalletRequest error:", error);
       res.status(500).json({
         success: false,
         error: "Failed to validate request",
@@ -884,35 +860,26 @@ export const validateWalletRequest = (required = []) => {
 };
 
 /* ------------------------------------------------------------
-   9️⃣ Request Tracking
+   9️⃣ Track Requests
 ------------------------------------------------------------ */
 export const trackWalletRequest = (req, res, next) => {
-  const requestId = `req_${Date.now()}_${Math.random()
-    .toString(36)
-    .slice(2, 10)}`;
+  const id = `req_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  req.requestId = id;
 
-  req.requestId = requestId;
-
-  const originalJson = res.json;
+  const json = res.json;
   res.json = function (data) {
-    if (!data.success) {
-      console.log(`[${requestId}] Wallet Error:`, data);
-    }
-    return originalJson.call(this, data);
+    if (!data.success) console.log(`[${id}]`, data.error);
+    return json.call(this, data);
   };
 
   next();
 };
 
 /* ------------------------------------------------------------
-   🔟 Global Error Handler (ES6)
+   🔟 Global Error Handler
 ------------------------------------------------------------ */
 export const walletErrorHandler = (error, req, res, next) => {
-  console.error("🔥 Wallet Middleware Error:", {
-    requestId: req.requestId,
-    user: req.user?._id,
-    message: error.message,
-  });
+  console.error("Wallet Error:", error);
 
   res.status(500).json({
     success: false,
@@ -921,13 +888,11 @@ export const walletErrorHandler = (error, req, res, next) => {
 };
 
 /* ------------------------------------------------------------
-   1️⃣1️⃣ Check wallet owner (User or Admin)
+   1️⃣1️⃣ Wallet Ownership
 ------------------------------------------------------------ */
 export const checkWalletOwnership = async (req, res, next) => {
   try {
-    const { walletId } = req.params;
-
-    const wallet = await Wallet.findById(walletId);
+    const wallet = await Wallet.findById(req.params.walletId);
 
     if (!wallet) {
       return res.status(404).json({
@@ -949,7 +914,7 @@ export const checkWalletOwnership = async (req, res, next) => {
     req.targetWallet = wallet;
     next();
   } catch (error) {
-    console.error("❌ checkWalletOwnership error:", error);
+    console.error("checkWalletOwnership error:", error);
     res.status(500).json({
       success: false,
       error: "Failed to verify wallet ownership",
@@ -957,6 +922,16 @@ export const checkWalletOwnership = async (req, res, next) => {
   }
 };
 
-
-
-
+export default {
+  ensureWallet,
+  checkWalletStatus,
+  validateSpending,
+  checkMinimumBalance,
+  logWalletOperation,
+  validateTransactionLimits,
+  walletRateLimit,
+  validateWalletRequest,
+  trackWalletRequest,
+  walletErrorHandler,
+  checkWalletOwnership,
+};
