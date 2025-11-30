@@ -376,13 +376,7 @@
 
 
 
-
-
-
-
-
-
-// server.js - Final Production Build With Cashfree Fix
+// server.js - Unified Backend with Socket.IO, Presence, Calls & All API Features
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -393,24 +387,28 @@ import morgan from 'morgan';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 
-// ROUTES
+// Routes (ALL ESM IMPORTS — FIXED)
 import agoraRoutes from './routes/agora.js';
 import authRoutes from './routes/authRoutes.js';
 import userRoutes from './routes/userRoutes.js';
+
 import walletRoutes from './routes/wallet.routes.js';
 import paymentRoutes from './routes/payment.routes.js';
 import transactionRoutes from './routes/transaction.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
+
 import testimonialRoutes from './routes/testimonialRoutes.js';
 import slotRoutes from './routes/slot.routes.js';
 import bookingRoutes from './routes/booking.routes.js';
 import providerRoutes from './routes/providerRoutes.js';
 import feedbackRoutes from './routes/feedbackRoutes.js';
+import notificationRoutes from './routes/notifications.js';  // FIXED
+
 import verificationRoutes from './routes/verification.routes.js';
 
-// Middleware
 import { errorHandler, notFoundHandler } from './middleware/errorMiddleware.js';
 import { authenticateToken } from './middleware/authMiddleware.js';
+import { rateLimiter } from './middleware/rateLimitMiddleware.js';
 
 import Provider from './models/Provider.js';
 
@@ -420,48 +418,130 @@ const app = express();
 const httpServer = createServer(app);
 
 /* ------------------------------------------------------
-    SOCKET.IO CONFIG
+    SOCKET.IO SETUP
 -------------------------------------------------------*/
 const io = new Server(httpServer, {
   cors: {
     origin: process.env.FRONTEND_URL || 'https://www.getcompanion.in',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
-  }
+  },
+  transports: ['websocket', 'polling']
 });
 
+// Track connected providers
 const connectedProviders = new Map();
 const busyProviders = new Map();
 
 io.on('connection', (socket) => {
   console.log('🔌 Socket connected:', socket.id);
 
+  /* 1️⃣ Provider Registers */
   socket.on('register-provider', async (providerId) => {
-    connectedProviders.set(providerId, socket.id);
+    try {
+      if (!providerId) return;
+
+      connectedProviders.set(providerId, socket.id);
+      console.log(`🟢 Provider Registered → ${providerId} | Socket = ${socket.id}`);
+
+      await Provider.findByIdAndUpdate(providerId, {
+        'presence.isOnline': true,
+        'presence.availabilityStatus': 'online',
+        'presence.lastSeen': new Date()
+      });
+
+      io.emit('presenceChanged', {
+        providerId,
+        isOnline: true,
+        status: 'online'
+      });
+    } catch (err) {
+      console.error('❌ Error in register-provider:', err);
+    }
+  });
+
+  /* 2️⃣ Presence */
+  socket.on('updatePresence', async ({ providerId, isOnline }) => {
+    try {
+      if (!providerId) return;
+
+      await Provider.findByIdAndUpdate(providerId, {
+        'presence.isOnline': isOnline,
+        'presence.availabilityStatus': isOnline ? 'online' : 'offline',
+        'presence.lastSeen': new Date()
+      });
+
+      io.emit('presenceChanged', {
+        providerId,
+        isOnline,
+        status: isOnline ? 'online' : 'offline'
+      });
+    } catch (err) {
+      console.error('❌ Error in updatePresence:', err);
+    }
+  });
+
+  /* 3️⃣ Busy state */
+  socket.on('provider-busy', async ({ providerId }) => {
+    busyProviders.set(providerId, true);
 
     await Provider.findByIdAndUpdate(providerId, {
       'presence.isOnline': true,
-      'presence.availabilityStatus': 'online',
+      'presence.availabilityStatus': 'busy',
       'presence.lastSeen': new Date()
     });
 
-    io.emit('presenceChanged', { providerId, isOnline: true, status: 'online' });
+    io.emit('presenceChanged', {
+      providerId,
+      isOnline: true,
+      status: 'busy'
+    });
   });
 
+  /* 4️⃣ Available */
+  socket.on('provider-available', async ({ providerId }) => {
+    busyProviders.delete(providerId);
+
+    await Provider.findByIdAndUpdate(providerId, {
+      'presence.isOnline': true,
+      'presence.availabilityStatus': 'available',
+      'presence.lastSeen': new Date()
+    });
+
+    io.emit('presenceChanged', {
+      providerId,
+      isOnline: true,
+      status: 'available'
+    });
+  });
+
+  /* 5️⃣ Disconnect */
   socket.on('disconnect', async () => {
-    for (const [providerId, socketId] of connectedProviders.entries()) {
-      if (socketId === socket.id) {
-        connectedProviders.delete(providerId);
-        busyProviders.delete(providerId);
+    try {
+      for (const [providerId, socketId] of connectedProviders.entries()) {
+        if (socketId === socket.id) {
+          connectedProviders.delete(providerId);
+          busyProviders.delete(providerId);
 
-        await Provider.findByIdAndUpdate(providerId, {
-          'presence.isOnline': false,
-          'presence.availabilityStatus': 'offline',
-          'presence.lastSeen': new Date()
-        });
+          console.log(`🔴 Provider Disconnected → ${providerId}`);
 
-        io.emit('presenceChanged', { providerId, isOnline: false, status: 'offline' });
+          await Provider.findByIdAndUpdate(providerId, {
+            'presence.isOnline': false,
+            'presence.availabilityStatus': 'offline',
+            'presence.lastSeen': new Date()
+          });
+
+          io.emit('presenceChanged', {
+            providerId,
+            isOnline: false,
+            status: 'offline'
+          });
+
+          break;
+        }
       }
+    } catch (err) {
+      console.error('❌ Error in disconnect handler:', err);
     }
   });
 });
@@ -471,50 +551,43 @@ app.set('connectedProviders', connectedProviders);
 app.set('busyProviders', busyProviders);
 
 /* ------------------------------------------------------
-    CORS CONFIG
+    BASE CONFIG
 -------------------------------------------------------*/
 app.set('trust proxy', 1);
 
 app.use(cors({
   origin: process.env.FRONTEND_URL || "https://www.getcompanion.in",
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
-  allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
 app.options("*", cors());
 
-/* ---------------------------------------------------------
-    🚨 CASHFREE WEBHOOK RAW BODY (MUST COME BEFORE JSON)
---------------------------------------------------------- */
-
-// Disable content encoding for webhook
-app.use("/api/webhooks/cashfree", (req, res, next) => {
-  req.headers["content-encoding"] = "identity";
-  next();
-});
-
-// Raw body ONLY for Cashfree Webhook
-app.use(
-  "/api/webhooks/cashfree",
-  express.raw({ type: "application/json" })
-);
-
-/* ---------------------------------------------------------
-    NORMAL PARSERS (AFTER RAW PARSER)
---------------------------------------------------------- */
 app.use(compression());
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+/* ---------------------------------------------------------
+   🔥 1. RAW BODY PARSER — CASHFREE WEBHOOK MUST COME FIRST
+--------------------------------------------------------- */
+app.use("/api/webhooks/cashfree", express.raw({ type: "application/json" }));
+
+/* ---------------------------------------------------------
+   🔥 2. NORMAL JSON PARSER AFTER WEBHOOK
+--------------------------------------------------------- */
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(morgan('combined'));
+app.use(morgan(process.env.NODE_ENV === 'development' ? 'dev' : 'combined'));
 
 /* ------------------------------------------------------
-    MONGO CONNECTION
+    CONNECT TO MONGODB
 -------------------------------------------------------*/
 let cachedDb = null;
+
 async function connectToDatabase() {
   if (cachedDb && mongoose.connection.readyState === 1) return cachedDb;
+
   const conn = await mongoose.connect(process.env.MONGO_URI);
   cachedDb = conn;
   console.log("🍃 MongoDB Connected");
@@ -527,34 +600,26 @@ app.use(async (req, res, next) => {
 });
 
 /* ------------------------------------------------------
-    HEALTH CHECK
+    ROUTES
 -------------------------------------------------------*/
 app.get('/', (req, res) => {
-  res.send('🚀 Backend & Socket Server Running');
+  res.send('🚀 Server is working fine!');
 });
 
 app.get('/api/health', (req, res) => {
   res.json({
     success: true,
-    status: 'OK',
-    db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    status: "OK",
+    database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
     connectedProviders: connectedProviders.size,
     busyProviders: busyProviders.size
   });
 });
 
-/* ------------------------------------------------------
-    🚨 WEBHOOK ROUTES MUST COME BEFORE AUTH MIDDLEWARE
--------------------------------------------------------*/
-app.use("/api/webhooks", webhookRoutes);
-
-/* ------------------------------------------------------
-    PROTECTED ROUTES
--------------------------------------------------------*/
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/agora', agoraRoutes);
-app.use('/api/notifications', require('./routes/notifications.js'));
+app.use('/api/notifications', notificationRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/slots', slotRoutes);
@@ -564,10 +629,8 @@ app.use('/api/transactions', authenticateToken, transactionRoutes);
 app.use('/api/testimonials', testimonialRoutes);
 app.use('/api/providers', providerRoutes);
 app.use('/api/feedback', feedbackRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
-/* ------------------------------------------------------
-    ERROR MIDDLEWARE
--------------------------------------------------------*/
 app.use(notFoundHandler);
 app.use(errorHandler);
 
@@ -581,5 +644,3 @@ connectToDatabase().then(() => {
     console.log(`🚀 Server running on port ${PORT}`);
   });
 });
-
-
