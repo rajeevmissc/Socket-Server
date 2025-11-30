@@ -44,7 +44,7 @@ export const addMoneyToWallet = async (req, res) => {
     const { amount, paymentMethod, transactionId, description } = req.body;
     
     // Validate payment method matches enum
-    const validPaymentMethods = ['UPI', 'Credit Card', 'Debit Card', 'Net Banking', 'Wallet', 'Cash', 'Stripe', 'Stripe Checkout'];
+    const validPaymentMethods = ['UPI', 'Credit Card', 'Debit Card', 'Net Banking', 'Wallet', 'Cash', 'Stripe', 'Stripe Checkout', 'Cashfree Checkout', 'Cashfree'];
     if (!validPaymentMethods.includes(paymentMethod)) {
       await session.abortTransaction();
       session.endSession();
@@ -519,4 +519,5 @@ export default {
   toggleWalletStatus,
   getWalletStats,
   transferMoney
+
 };
