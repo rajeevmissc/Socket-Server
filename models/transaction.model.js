@@ -61,13 +61,26 @@ const transactionSchema = new mongoose.Schema({
   },
   
   // Payment-related fields - UPDATED ENUM
-  paymentMethod: { 
-    type: String,
-    enum: ['UPI', 'Credit Card', 'Debit Card', 'Net Banking', 'Wallet', 'Cash', 'Stripe', 'Stripe Checkout']
-  },
+paymentMethod: {
+  type: String,
+  enum: [
+    'UPI',
+    'Credit Card',
+    'Debit Card',
+    'Net Banking',
+    'Wallet',
+    'Cash',
+    'Stripe',
+    'Stripe Checkout',
+    'Cashfree',
+    'Cashfree Checkout'
+  ],
+  required: true
+},
+
   paymentGateway: { 
     type: String,
-    enum: ['Razorpay', 'Stripe', 'PayPal', 'Manual']
+    enum: ['Razorpay', 'Stripe', 'PayPal', 'Manual', 'Cashfree']
   },
   paymentId: { 
     type: String 
@@ -243,5 +256,6 @@ transactionSchema.pre('save', function(next) {
   }
   next();
 });
+
 
 export const Transaction = mongoose.model('Transaction', transactionSchema);
