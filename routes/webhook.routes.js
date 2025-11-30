@@ -1,294 +1,141 @@
-// // routes/webhook.routes.js
-// import express from 'express';
-// import { Payment } from '../models/payment.model.js';
-// import { validateWebhookSignature } from '../utils/signature.util.js';
-
-// const router = express.Router();
-
-// // Raw body parser middleware for webhooks
-// const rawBodyParser = express.raw({ type: 'application/json' });
-
-// /**
-//  * Handle Razorpay webhooks
-//  */
-// router.post('/razorpay', rawBodyParser, async (req, res) => {
-//   try {
-//     const signature = req.headers['x-razorpay-signature'];
-//     const body = req.body.toString();
-    
-//     // Verify webhook signature
-//     const isValidSignature = validateWebhookSignature(body, signature);
-    
-//     if (!isValidSignature) {
-//       console.warn('Invalid webhook signature received');
-//       return res.status(400).json({ success: false, error: 'Invalid signature' });
-//     }
-    
-//     const event = JSON.parse(body);    
-//     // Handle different webhook events
-//     switch (event.event) {
-//       case 'payment.captured':
-//         await handlePaymentCaptured(event.payload.payment.entity);
-//         break;
-        
-//       case 'payment.failed':
-//         await handlePaymentFailed(event.payload.payment.entity);
-//         break;
-        
-//       case 'refund.created':
-//         await handleRefundCreated(event.payload.refund.entity);
-//         break;
-        
-//       case 'order.paid':
-//         await handleOrderPaid(event.payload.order.entity);
-//         break;
-        
-//       default:
-//         console.log(`Unhandled webhook event: ${event.event}`);
-//     }
-    
-//     res.json({ success: true });
-    
-//   } catch (error) {
-//     console.error('Webhook processing error:', error);
-//     res.status(500).json({ success: false, error: 'Webhook processing failed' });
-//   }
-// });
-
-// /**
-//  * Handle payment captured webhook
-//  */
-// const handlePaymentCaptured = async (paymentData) => {
-//   try {
-//     const payment = await Payment.findOne({ paymentId: paymentData.order_id });
-    
-//     if (payment && payment.status !== 'captured') {
-//       payment.status = 'captured';
-//       payment.gatewayResponse.razorpay_payment_id = paymentData.id;
-//       payment.capturedAt = new Date();
-//       await payment.save();
-//     }
-//   } catch (error) {
-//     console.error('Error handling payment captured:', error);
-//   }
-// };
-
-// /**
-//  * Handle payment failed webhook
-//  */
-// const handlePaymentFailed = async (paymentData) => {
-//   try {
-//     const payment = await Payment.findOne({ paymentId: paymentData.order_id });
-    
-//     if (payment && payment.status !== 'failed') {
-//       payment.status = 'failed';
-//       payment.failureCode = paymentData.error_code;
-//       payment.failureReason = paymentData.error_description;
-//       payment.failedAt = new Date();
-//       await payment.save();
-//     }
-//   } catch (error) {
-//     console.error('Error handling payment failed:', error);
-//   }
-// };
-
-// /**
-//  * Handle refund created webhook
-//  */
-// const handleRefundCreated = async (refundData) => {
-//   try {
-//     const payment = await Payment.findOne({ 
-//       'gatewayResponse.razorpay_payment_id': refundData.payment_id 
-//     });
-    
-//     if (payment) {
-//       await payment.addRefund({
-//         refundId: refundData.id,
-//         amount: refundData.amount / 100, // Convert from paise
-//         reason: refundData.notes?.reason || 'Refund processed',
-//         status: 'processed',
-//         processedAt: new Date()
-//       });
-//     }
-//   } catch (error) {
-//     console.error('Error handling refund created:', error);
-//   }
-// };
-
-// /**
-//  * Handle order paid webhook
-//  */
-// const handleOrderPaid = async (orderData) => {
-//   try {
-//     const payment = await Payment.findOne({ paymentId: orderData.id });
-    
-//     if (payment && payment.status === 'created') {
-//       payment.status = 'authorized';
-//       payment.authorizedAt = new Date();
-//       await payment.save();
-//     }
-//   } catch (error) {
-//     console.error('Error handling order paid:', error);
-//   }
-// };
-
-// export default router;
-
-
-
-
-
-
-
-
-
-// routes/cashfree.webhook.routes.js
-import express from "express";
-import crypto from "crypto";
-import { Payment } from "../models/payment.model.js";
+// routes/webhook.routes.js
+import express from 'express';
+import { Payment } from '../models/payment.model.js';
+import { validateWebhookSignature } from '../utils/signature.util.js';
 
 const router = express.Router();
 
-// Cashfree uses raw body for signature validation
-const rawParser = express.raw({ type: "application/json" });
+// Raw body parser middleware for webhooks
+const rawBodyParser = express.raw({ type: 'application/json' });
 
 /**
- * Validate Cashfree Signature
+ * Handle Razorpay webhooks
  */
-function validateCashfreeSignature(rawBody, signature, secret) {
-  const computed = crypto
-    .createHmac("sha256", secret)
-    .update(rawBody)
-    .digest("base64");
-
-  return computed === signature;
-}
-
-/**
- * MAIN WEBHOOK ENDPOINT
- */
-router.post("/cashfree", rawParser, async (req, res) => {
+router.post('/razorpay', rawBodyParser, async (req, res) => {
   try {
-    const signature = req.headers["x-webhook-signature"];
-    const webhookBody = req.body.toString();
-
-    const secret = process.env.CASHFREE_WEBHOOK_SECRET;
-
-    if (!validateCashfreeSignature(webhookBody, signature, secret)) {
-      console.warn("❌ Invalid Cashfree webhook signature");
-      return res.status(400).json({ success: false, error: "Invalid signature" });
+    const signature = req.headers['x-razorpay-signature'];
+    const body = req.body.toString();
+    
+    // Verify webhook signature
+    const isValidSignature = validateWebhookSignature(body, signature);
+    
+    if (!isValidSignature) {
+      console.warn('Invalid webhook signature received');
+      return res.status(400).json({ success: false, error: 'Invalid signature' });
     }
-
-    const event = JSON.parse(webhookBody);
-    const type = event?.type || event?.event;
-
-    console.log("📩 Cashfree Webhook Received:", type);
-
-    // Route based on event type
-    switch (type) {
-      case "PAYMENT_SUCCESS_WEBHOOK":
-        await handlePaymentSuccess(event.data);
+    
+    const event = JSON.parse(body);    
+    // Handle different webhook events
+    switch (event.event) {
+      case 'payment.captured':
+        await handlePaymentCaptured(event.payload.payment.entity);
         break;
-
-      case "PAYMENT_FAILED_WEBHOOK":
-        await handlePaymentFailed(event.data);
+        
+      case 'payment.failed':
+        await handlePaymentFailed(event.payload.payment.entity);
         break;
-
-      case "REFUND_STATUS_WEBHOOK":
-        await handleRefund(event.data);
+        
+      case 'refund.created':
+        await handleRefundCreated(event.payload.refund.entity);
         break;
-
+        
+      case 'order.paid':
+        await handleOrderPaid(event.payload.order.entity);
+        break;
+        
       default:
-        console.log("ℹ Unhandled Cashfree Webhook:", type);
+        console.log(`Unhandled webhook event: ${event.event}`);
     }
-
-    return res.json({ success: true });
-  } catch (err) {
-    console.error("❌ Cashfree Webhook Error:", err);
-    return res.status(500).json({ success: false, error: "Webhook error" });
+    
+    res.json({ success: true });
+    
+  } catch (error) {
+    console.error('Webhook processing error:', error);
+    res.status(500).json({ success: false, error: 'Webhook processing failed' });
   }
 });
 
-
-// ==================================================
-// HANDLERS
-// ==================================================
-
 /**
- * Payment Successful → Mark captured
+ * Handle payment captured webhook
  */
-const handlePaymentSuccess = async (paymentData) => {
+const handlePaymentCaptured = async (paymentData) => {
   try {
-    const orderId = paymentData.order.order_id;
-    const cfPaymentId = paymentData.payment.payment_id;
-
-    const payment = await Payment.findOne({ orderId });
-
-    if (!payment) return console.log("⚠ Payment not found:", orderId);
-
-    if (payment.status !== "captured") {
-      payment.status = "captured";
+    const payment = await Payment.findOne({ paymentId: paymentData.order_id });
+    
+    if (payment && payment.status !== 'captured') {
+      payment.status = 'captured';
+      payment.gatewayResponse.razorpay_payment_id = paymentData.id;
       payment.capturedAt = new Date();
-      payment.gatewayResponse = paymentData;
       await payment.save();
-
-      console.log("✅ Payment Captured:", orderId);
     }
-  } catch (err) {
-    console.error("❌ handlePaymentSuccess:", err);
+  } catch (error) {
+    console.error('Error handling payment captured:', error);
   }
 };
 
-
 /**
- * Payment Failed → Mark failed
+ * Handle payment failed webhook
  */
 const handlePaymentFailed = async (paymentData) => {
   try {
-    const orderId = paymentData.order.order_id;
-
-    const payment = await Payment.findOne({ orderId });
-    if (!payment) return;
-
-    payment.status = "failed";
-    payment.failureReason = paymentData.payment.error_message || "Payment failed";
-    payment.failedAt = new Date();
-    await payment.save();
-
-    console.log("❌ Payment Failed:", orderId);
-  } catch (err) {
-    console.error("❌ handlePaymentFailed:", err);
+    const payment = await Payment.findOne({ paymentId: paymentData.order_id });
+    
+    if (payment && payment.status !== 'failed') {
+      payment.status = 'failed';
+      payment.failureCode = paymentData.error_code;
+      payment.failureReason = paymentData.error_description;
+      payment.failedAt = new Date();
+      await payment.save();
+    }
+  } catch (error) {
+    console.error('Error handling payment failed:', error);
   }
 };
 
+/**
+ * Handle refund created webhook
+ */
+const handleRefundCreated = async (refundData) => {
+  try {
+    const payment = await Payment.findOne({ 
+      'gatewayResponse.razorpay_payment_id': refundData.payment_id 
+    });
+    
+    if (payment) {
+      await payment.addRefund({
+        refundId: refundData.id,
+        amount: refundData.amount / 100, // Convert from paise
+        reason: refundData.notes?.reason || 'Refund processed',
+        status: 'processed',
+        processedAt: new Date()
+      });
+    }
+  } catch (error) {
+    console.error('Error handling refund created:', error);
+  }
+};
 
 /**
- * Refund Updated → Add refund to DB
+ * Handle order paid webhook
  */
-const handleRefund = async (refundData) => {
+const handleOrderPaid = async (orderData) => {
   try {
-    const orderId = refundData.order_id;
-
-    const payment = await Payment.findOne({ orderId });
-    if (!payment) return;
-
-    const refundAmount = refundData.refund_amount;
-
-    await payment.addRefund({
-      refundId: refundData.refund_id,
-      amount: refundAmount,
-      reason: refundData.refund_note || "Refund processed",
-      status: refundData.refund_status?.toLowerCase() || "processed",
-      processedAt: new Date(),
-    });
-
-    console.log("♻ Refund Recorded:", refundData.refund_id);
-  } catch (err) {
-    console.error("❌ handleRefund:", err);
+    const payment = await Payment.findOne({ paymentId: orderData.id });
+    
+    if (payment && payment.status === 'created') {
+      payment.status = 'authorized';
+      payment.authorizedAt = new Date();
+      await payment.save();
+    }
+  } catch (error) {
+    console.error('Error handling order paid:', error);
   }
 };
 
 export default router;
+
+
+
 
 
 
