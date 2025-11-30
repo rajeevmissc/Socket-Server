@@ -326,7 +326,7 @@ export const validateWalletRequest = (requiredFields = [], options = {}) => {
         }
 
         if (req.body.paymentMethod !== undefined) {
-          const validPaymentMethods = ['UPI', 'Credit Card', 'Debit Card', 'Net Banking', 'Wallet', 'Cash', 'Stripe', 'Stripe Checkout'];
+          const validPaymentMethods = ['UPI', 'Credit Card', 'Debit Card', 'Net Banking', 'Wallet', 'Cash', 'Stripe', 'Stripe Checkout', 'Cashfree Checkout', 'Cashfree'];
           if (typeof req.body.paymentMethod !== 'string' || req.body.paymentMethod.trim().length === 0) {
             errors.push('Payment method must be a non-empty string');
           } else if (!validPaymentMethods.includes(req.body.paymentMethod)) {
@@ -567,4 +567,5 @@ export default {
   trackWalletRequest,
   walletErrorHandler,
   checkWalletOwnership
+
 };
