@@ -191,23 +191,23 @@ export const deductMoneyFromWallet = async (req, res) => {
     const balanceAfter = balanceBefore - amount;
     
     // Create transaction data - FIX: Handle empty providerId
-    const transactionData = {
-      userId: req.user._id,
-      walletId: req.wallet._id,
-      type: 'debit',
-      amount,
-      description,
-      reference,
-      serviceId: serviceId || `call_${Date.now()}`,
-      category: 'service_payment',
-      balanceBefore,
-      balanceAfter,
-      ipAddress: req.ip,
-      userAgent: req.get('User-Agent'),
-      metadata: metadata || {},
-      status: 'completed'
-    };
-    
+  const transactionData = {
+  userId: req.user._id,
+  walletId: req.wallet._id,
+  type: 'debit',
+  amount,
+  description,
+  reference,
+  serviceId: serviceId || `call_${Date.now()}`,
+  category: 'service_payment',
+  balanceBefore,
+  balanceAfter,
+  paymentMethod: "wallet",  // 🔥 FIXED REQUIRED FIELD
+  ipAddress: req.ip,
+  userAgent: req.get('User-Agent'),
+  metadata: metadata || {},
+  status: 'completed'
+}; 
     // Add serviceType only if provided
     if (serviceType) {
       transactionData.serviceType = serviceType;
@@ -521,3 +521,4 @@ export default {
   transferMoney
 
 };
+
