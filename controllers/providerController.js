@@ -139,8 +139,8 @@ export const getAllProviders = async (req, res) => {
       // Female First → Presence priority → Rating
       {
         $sort: {
-          genderOrder: 1,
           presenceOrder: 1,
+          genderOrder: 1,
           "ratings.overall": -1
         }
       },
@@ -293,6 +293,7 @@ export const deleteProvider = async (req, res) => {
     });
   }
 };
+
 
 
 
