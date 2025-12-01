@@ -214,6 +214,128 @@ const { RtcTokenBuilder, RtmTokenBuilder, RtcRole, RtmRole } = require('agora-ac
 
 const router = express.Router();
 
+// const generateCallTokens = async (req, res, next) => {
+//   try {
+//     const { channel } = req.query;
+    
+//     if (!channel) {
+//       return res.status(400).json({ 
+//         error: 'Channel name is required', 
+//         status: 'error' 
+//       });
+//     }
+
+//     if (!/^[a-zA-Z0-9_-]+$/.test(channel)) {
+//       return res.status(400).json({ 
+//         error: 'Invalid channel name format', 
+//         status: 'error' 
+//       });
+//     }
+
+//     const appID = process.env.AGORA_APP_ID;
+//     const appCertificate = process.env.AGORA_APP_CERT;
+    
+//     if (!appID || !appCertificate) {
+//       console.error('Agora configuration missing');
+//       return res.status(500).json({ 
+//         error: 'Server configuration error', 
+//         status: 'error' 
+//       });
+//     }
+
+//     const expirationTimeInSeconds = 3600 * 24;
+//     const currentTimestamp = Math.floor(Date.now() / 1000);
+//     const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
+
+//     // CRITICAL FIX: Use string UID consistently
+//     // MongoDB ObjectId as string works perfectly for both RTC and RTM
+//     const userIdString = req.user._id.toString();
+    
+//     // For RTC: Can use either string or number, but string is safer
+//     const rtcUid = userIdString;
+    
+//     // For RTM: MUST be string
+//     const rtmUid = userIdString;
+
+//     console.log('🔐 Generating Agora tokens:', {
+//       channel,
+//       rtcUid,
+//       rtmUid,
+//       appID: appID.substring(0, 8) + '...',
+//       expiresAt: new Date(privilegeExpiredTs * 1000).toISOString()
+//     });
+
+//     try {
+//       // Generate RTC Token (using UID as 0 and will send string UID to client)
+//       const rtcToken = RtcTokenBuilder.buildTokenWithUid(
+//         appID, 
+//         appCertificate, 
+//         channel, 
+//         0, // Use 0 to allow any UID
+//         RtcRole.PUBLISHER, 
+//         privilegeExpiredTs
+//       );
+
+//       // Generate RTM Token with string UID
+//       const rtmToken = RtmTokenBuilder.buildToken(
+//         appID, 
+//         appCertificate, 
+//         rtmUid, // MUST be string
+//         RtmRole.Rtm_User, 
+//         privilegeExpiredTs
+//       );
+
+//       console.log('✅ Tokens generated successfully');
+
+//       // Store tokens
+//       try {
+//         await User.findByIdAndUpdate(
+//           req.user._id, 
+//           { 
+//             $set: { 
+//               rtcToken,
+//               rtmToken,
+//               rtcChannel: channel,
+//               rtcUid: rtcUid,
+//               rtmUid: rtmUid,
+//               lastTokenGenerated: new Date(),
+//               tokenExpiresAt: new Date(privilegeExpiredTs * 1000)
+//             } 
+//           },
+//           { new: true }
+//         );
+//       } catch (dbError) {
+//         console.warn('⚠️ Failed to update user tokens:', dbError.message);
+//       }
+
+//       // Return tokens with string UID
+//       res.status(200).json({ 
+//         rtcToken,
+//         rtmToken,
+//         channel,
+//         uid: rtcUid, // Return as string
+//         appId: appID,
+//         status: 'success',
+//         tokenExpiry: privilegeExpiredTs * 1000,
+//         expiresAt: privilegeExpiredTs
+//       });
+
+//     } catch (tokenError) {
+//       console.error('❌ Token generation error:', tokenError);
+//       return res.status(500).json({ 
+//         error: 'Failed to generate tokens', 
+//         status: 'error',
+//         details: tokenError.message
+//       });
+//     }
+
+//   } catch (error) {
+//     console.error('❌ Call tokens error:', error);
+//     next(error);
+//   }
+// };
+
+
 const generateCallTokens = async (req, res, next) => {
   try {
     const { channel } = req.query;
@@ -247,40 +369,32 @@ const generateCallTokens = async (req, res, next) => {
     const currentTimestamp = Math.floor(Date.now() / 1000);
     const privilegeExpiredTs = currentTimestamp + expirationTimeInSeconds;
 
-    // CRITICAL FIX: Use string UID consistently
-    // MongoDB ObjectId as string works perfectly for both RTC and RTM
+    // ✅ Use consistent string UID for both RTC and RTM
     const userIdString = req.user._id.toString();
-    
-    // For RTC: Can use either string or number, but string is safer
-    const rtcUid = userIdString;
-    
-    // For RTM: MUST be string
-    const rtmUid = userIdString;
 
     console.log('🔐 Generating Agora tokens:', {
       channel,
-      rtcUid,
-      rtmUid,
+      uid: userIdString,
       appID: appID.substring(0, 8) + '...',
       expiresAt: new Date(privilegeExpiredTs * 1000).toISOString()
     });
 
     try {
-      // Generate RTC Token (using UID as 0 and will send string UID to client)
+      // ✅ Generate RTC Token with ACTUAL UID (NOT 0)
       const rtcToken = RtcTokenBuilder.buildTokenWithUid(
         appID, 
         appCertificate, 
         channel, 
-        0, // Use 0 to allow any UID
+        userIdString, // ← CHANGED FROM 0
         RtcRole.PUBLISHER, 
         privilegeExpiredTs
       );
 
-      // Generate RTM Token with string UID
+      // ✅ Generate RTM Token with SAME UID
       const rtmToken = RtmTokenBuilder.buildToken(
         appID, 
         appCertificate, 
-        rtmUid, // MUST be string
+        userIdString, // ← MUST match RTC UID
         RtmRole.Rtm_User, 
         privilegeExpiredTs
       );
@@ -296,8 +410,8 @@ const generateCallTokens = async (req, res, next) => {
               rtcToken,
               rtmToken,
               rtcChannel: channel,
-              rtcUid: rtcUid,
-              rtmUid: rtmUid,
+              rtcUid: userIdString,
+              rtmUid: userIdString,
               lastTokenGenerated: new Date(),
               tokenExpiresAt: new Date(privilegeExpiredTs * 1000)
             } 
@@ -313,7 +427,7 @@ const generateCallTokens = async (req, res, next) => {
         rtcToken,
         rtmToken,
         channel,
-        uid: rtcUid, // Return as string
+        uid: userIdString, // ← Return as string
         appId: appID,
         status: 'success',
         tokenExpiry: privilegeExpiredTs * 1000,
@@ -334,6 +448,7 @@ const generateCallTokens = async (req, res, next) => {
     next(error);
   }
 };
+
 
 const getActiveTokens = async (req, res, next) => {
   try {
