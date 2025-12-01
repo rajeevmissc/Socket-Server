@@ -183,6 +183,9 @@ export const getTransactions = async (req, res) => {
 
 
 
+// ⛔ Provider cannot change type or providerId through query parameters.
+// ✔ Provider only sees income (credit) related to their ID.
+
 export const getAllTransactionsForProvider = async (req, res) => {
   try {
     if (req.user.role !== "provider") {
@@ -204,12 +207,16 @@ export const getAllTransactionsForProvider = async (req, res) => {
     const startDate = req.query.startDate;
     const endDate = req.query.endDate;
 
-    // Provider can view only their own earning transactions (credit)
-    const query = { providerId, type: "credit" };
+    /** 🚨 MAIN SAFE FILTER — Cannot be changed by the frontend */
+    const query = {
+      providerId: providerId,
+      type: "credit"  // provider only sees money they earn
+    };
 
     if (status) query.status = status;
     if (category) query.category = category;
     if (serviceType) query.serviceType = serviceType;
+
     if (startDate || endDate) {
       query.createdAt = {};
       if (startDate) query.createdAt.$gte = new Date(startDate);
@@ -220,8 +227,8 @@ export const getAllTransactionsForProvider = async (req, res) => {
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate("userId", "firstName lastName email")
-      .populate("providerId", "firstName lastName email")
+      .populate("userId", "firstName lastName email") // customer info
+      .populate("providerId", "firstName lastName email") // provider info
       .lean();
 
     const total = await Transaction.countDocuments(query);
@@ -229,38 +236,23 @@ export const getAllTransactionsForProvider = async (req, res) => {
     const formatted = transactions.map((t) => ({
       id: t._id,
       reference: t.reference,
-      type: t.type,
       amount: t.amount,
       formattedAmount: `₹${(t.amount || 0).toLocaleString("en-IN")}`,
-      description: t.description || "",
-      status: t.status,
-      category: t.category,
+      type: t.type,
+      description: t.description,
       serviceId: t.serviceId,
       serviceType: t.serviceType,
-      user: t.userId
-        ? {
-            id: t.userId._id,
-            name: `${t.userId.firstName} ${t.userId.lastName}`.trim(),
-            email: t.userId.email
-          }
-        : null,
-      provider: t.providerId
-        ? {
-            id: t.providerId._id,
-            name: `${t.providerId.firstName} ${t.providerId.lastName}`.trim(),
-            email: t.providerId.email
-          }
-        : null,
-      balanceBefore: t.balanceBefore || 0,
-      balanceAfter: t.balanceAfter || 0,
-      paymentMethod: t.paymentMethod || null,
-      createdAt: t.createdAt,
-      processedAt: t.processedAt || null,
-      canRefund: false,
-      refundableAmount: 0
+      status: t.status,
+      category: t.category,
+      user: t.userId ? {
+        id: t.userId._id,
+        name: `${t.userId.firstName} ${t.userId.lastName}`.trim(),
+        email: t.userId.email,
+      } : null,
+      createdAt: t.createdAt
     }));
 
-    /** 🚀 Earnings Stats */
+    /** 📌 Earnings Stats */
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -268,9 +260,9 @@ export const getAllTransactionsForProvider = async (req, res) => {
     const earningsStats = await Transaction.aggregate([
       {
         $match: {
-          providerId,
+          providerId: providerId,
           type: "credit",
-          status: "completed" // only successful earnings count
+          status: "completed"
         }
       },
       {
@@ -291,18 +283,20 @@ export const getAllTransactionsForProvider = async (req, res) => {
       }
     ]);
 
-    const stats = earningsStats.length > 0
-      ? earningsStats[0]
-      : { totalEarnings: 0, monthlyEarnings: 0, todayEarnings: 0 };
+    const stats = earningsStats[0] || {
+      totalEarnings: 0,
+      monthlyEarnings: 0,
+      todayEarnings: 0
+    };
 
     res.json({
       success: true,
       data: {
         transactions: formatted,
         earningsStats: {
-          totalEarnings: Math.round(stats.totalEarnings * 100) / 100,
-          monthlyEarnings: Math.round(stats.monthlyEarnings * 100) / 100,
-          todayEarnings: Math.round(stats.todayEarnings * 100) / 100
+          totalEarnings: stats.totalEarnings,
+          monthlyEarnings: stats.monthlyEarnings,
+          todayEarnings: stats.todayEarnings
         },
         pagination: {
           page,
@@ -311,15 +305,10 @@ export const getAllTransactionsForProvider = async (req, res) => {
           totalPages: Math.ceil(total / limit),
           hasNext: page < Math.ceil(total / limit),
           hasPrev: page > 1
-        },
-        filters: {
-          status,
-          category,
-          serviceType,
-          dateRange: startDate && endDate ? { startDate, endDate } : null
         }
       }
     });
+
   } catch (error) {
     console.error("Error returning provider transactions:", error);
     res.status(500).json({
@@ -844,6 +833,7 @@ export default {
   searchTransactions,
   getAllTransactionsForProvider
 };
+
 
 
 
