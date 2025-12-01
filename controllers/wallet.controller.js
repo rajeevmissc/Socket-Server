@@ -150,7 +150,7 @@ export const deductMoneyFromWallet = async (req, res) => {
     }
     
     // Validate service type if provided
-    const validServiceTypes = ['call', 'video', 'visit', 'subscription', 'other'];
+    const validServiceTypes = ['call', 'video', 'visit', 'chat', 'subscription', 'other'];
     if (serviceType && !validServiceTypes.includes(serviceType)) {
       await session.abortTransaction();
       session.endSession();
@@ -521,5 +521,6 @@ export default {
   transferMoney
 
 };
+
 
 
