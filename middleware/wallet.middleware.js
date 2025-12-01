@@ -935,3 +935,4 @@ export default {
   walletErrorHandler,
   checkWalletOwnership,
 };
+
