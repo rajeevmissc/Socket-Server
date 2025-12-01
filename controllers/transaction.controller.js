@@ -182,9 +182,9 @@ export const getTransactions = async (req, res) => {
 
 
 
+
 export const getAllTransactionsForProvider = async (req, res) => {
   try {
-    // Allow only providers to access this API
     if (req.user.role !== "provider") {
       return res.status(403).json({
         success: false,
@@ -192,32 +192,30 @@ export const getAllTransactionsForProvider = async (req, res) => {
       });
     }
 
+    const providerId = req.user._id;
+
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const type = req.query.type;
     const status = req.query.status;
     const category = req.query.category;
     const serviceType = req.query.serviceType;
     const startDate = req.query.startDate;
     const endDate = req.query.endDate;
 
-    // Provider can see ALL transactions (same as admin)
-    const query = {};
+    // Provider can view only their own earning transactions (credit)
+    const query = { providerId, type: "credit" };
 
-    if (type) query.type = type;
     if (status) query.status = status;
     if (category) query.category = category;
     if (serviceType) query.serviceType = serviceType;
-
     if (startDate || endDate) {
       query.createdAt = {};
       if (startDate) query.createdAt.$gte = new Date(startDate);
       if (endDate) query.createdAt.$lte = new Date(endDate);
     }
 
-    // Fetch all transactions + populate user + provider
     const transactions = await Transaction.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -233,13 +231,12 @@ export const getAllTransactionsForProvider = async (req, res) => {
       reference: t.reference,
       type: t.type,
       amount: t.amount,
-      formattedAmount: `₹${(t.amount || 0).toLocaleString('en-IN')}`,
+      formattedAmount: `₹${(t.amount || 0).toLocaleString("en-IN")}`,
       description: t.description || "",
       status: t.status,
       category: t.category,
       serviceId: t.serviceId,
       serviceType: t.serviceType,
-
       user: t.userId
         ? {
             id: t.userId._id,
@@ -247,7 +244,6 @@ export const getAllTransactionsForProvider = async (req, res) => {
             email: t.userId.email
           }
         : null,
-
       provider: t.providerId
         ? {
             id: t.providerId._id,
@@ -255,24 +251,59 @@ export const getAllTransactionsForProvider = async (req, res) => {
             email: t.providerId.email
           }
         : null,
-
       balanceBefore: t.balanceBefore || 0,
       balanceAfter: t.balanceAfter || 0,
       paymentMethod: t.paymentMethod || null,
       createdAt: t.createdAt,
       processedAt: t.processedAt || null,
-
-      canRefund:
-        t.type === "debit" && t.status === "completed" && t.amount > 0,
-
-      refundableAmount:
-        t.type === "debit" && t.status === "completed" ? t.amount : 0
+      canRefund: false,
+      refundableAmount: 0
     }));
+
+    /** 🚀 Earnings Stats */
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const earningsStats = await Transaction.aggregate([
+      {
+        $match: {
+          providerId,
+          type: "credit",
+          status: "completed" // only successful earnings count
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          totalEarnings: { $sum: "$amount" },
+          monthlyEarnings: {
+            $sum: {
+              $cond: [{ $gte: ["$createdAt", startOfMonth] }, "$amount", 0]
+            }
+          },
+          todayEarnings: {
+            $sum: {
+              $cond: [{ $gte: ["$createdAt", startOfDay] }, "$amount", 0]
+            }
+          }
+        }
+      }
+    ]);
+
+    const stats = earningsStats.length > 0
+      ? earningsStats[0]
+      : { totalEarnings: 0, monthlyEarnings: 0, todayEarnings: 0 };
 
     res.json({
       success: true,
       data: {
         transactions: formatted,
+        earningsStats: {
+          totalEarnings: Math.round(stats.totalEarnings * 100) / 100,
+          monthlyEarnings: Math.round(stats.monthlyEarnings * 100) / 100,
+          todayEarnings: Math.round(stats.todayEarnings * 100) / 100
+        },
         pagination: {
           page,
           limit,
@@ -282,23 +313,22 @@ export const getAllTransactionsForProvider = async (req, res) => {
           hasPrev: page > 1
         },
         filters: {
-          type,
           status,
           category,
           serviceType,
-          dateRange:
-            startDate && endDate ? { startDate, endDate } : null
+          dateRange: startDate && endDate ? { startDate, endDate } : null
         }
       }
     });
   } catch (error) {
-    console.error("Error returning provider-admin transactions:", error);
+    console.error("Error returning provider transactions:", error);
     res.status(500).json({
       success: false,
       error: "Failed to fetch transactions"
     });
   }
 };
+
 
 /**
  * Get transaction by reference ID
@@ -814,5 +844,6 @@ export default {
   searchTransactions,
   getAllTransactionsForProvider
 };
+
 
 
