@@ -202,7 +202,7 @@ export const deductMoneyFromWallet = async (req, res) => {
   category: 'service_payment',
   balanceBefore,
   balanceAfter,
-  paymentMethod: "wallet",  // 🔥 FIXED REQUIRED FIELD
+  paymentMethod: "Wallet",  // 🔥 FIXED REQUIRED FIELD
   ipAddress: req.ip,
   userAgent: req.get('User-Agent'),
   metadata: metadata || {},
@@ -521,4 +521,5 @@ export default {
   transferMoney
 
 };
+
 
