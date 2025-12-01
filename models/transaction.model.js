@@ -53,7 +53,7 @@ const transactionSchema = new mongoose.Schema({
   },
   serviceType: { 
     type: String, 
-    enum: ['call', 'video', 'visit', 'subscription', 'other'] 
+    enum: ['call', 'chat', 'video', 'visit', 'subscription', 'other'] 
   },
   providerId: { 
     type: mongoose.Schema.Types.ObjectId, 
@@ -259,3 +259,4 @@ transactionSchema.pre('save', function(next) {
 
 
 export const Transaction = mongoose.model('Transaction', transactionSchema);
+
