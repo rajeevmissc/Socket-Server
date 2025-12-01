@@ -186,6 +186,9 @@ export const getTransactions = async (req, res) => {
 // ⛔ Provider cannot change type or providerId through query parameters.
 // ✔ Provider only sees income (credit) related to their ID.
 
+// ⛔ Provider cannot change type or providerId through query parameters.
+// ✔ Provider sees all income related to their ID (even if transaction type = debit)
+
 export const getAllTransactionsForProvider = async (req, res) => {
   try {
     if (req.user.role !== "provider") {
@@ -207,16 +210,15 @@ export const getAllTransactionsForProvider = async (req, res) => {
     const startDate = req.query.startDate;
     const endDate = req.query.endDate;
 
-    /** 🚨 MAIN SAFE FILTER — Cannot be changed by the frontend */
+    /** 🚨 MAIN SAFE FILTER */
     const query = {
-      providerId: providerId,
-      type: "credit"  // provider only sees money they earn
+      providerId: providerId // provider earned this transaction
     };
 
+    // Additional filters
     if (status) query.status = status;
     if (category) query.category = category;
     if (serviceType) query.serviceType = serviceType;
-
     if (startDate || endDate) {
       query.createdAt = {};
       if (startDate) query.createdAt.$gte = new Date(startDate);
@@ -238,17 +240,19 @@ export const getAllTransactionsForProvider = async (req, res) => {
       reference: t.reference,
       amount: t.amount,
       formattedAmount: `₹${(t.amount || 0).toLocaleString("en-IN")}`,
-      type: t.type,
+      type: "credit", // always show provider earnings as credit
       description: t.description,
       serviceId: t.serviceId,
       serviceType: t.serviceType,
       status: t.status,
       category: t.category,
-      user: t.userId ? {
-        id: t.userId._id,
-        name: `${t.userId.firstName} ${t.userId.lastName}`.trim(),
-        email: t.userId.email,
-      } : null,
+      user: t.userId
+        ? {
+            id: t.userId._id,
+            name: `${t.userId.firstName} ${t.userId.lastName}`.trim(),
+            email: t.userId.email,
+          }
+        : null,
       createdAt: t.createdAt
     }));
 
@@ -260,8 +264,7 @@ export const getAllTransactionsForProvider = async (req, res) => {
     const earningsStats = await Transaction.aggregate([
       {
         $match: {
-          providerId: providerId,
-          type: "credit",
+          providerId: providerId,       // earned by provider
           status: "completed"
         }
       },
@@ -833,6 +836,7 @@ export default {
   searchTransactions,
   getAllTransactionsForProvider
 };
+
 
 
 
