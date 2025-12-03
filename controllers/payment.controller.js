@@ -672,6 +672,7 @@ export const createCheckoutSession = async (req, res) => {
       success_url,
       cancel_url, // not used directly by Cashfree, we use return_url
       metadata = {},
+      userData,
     } = req.body;
 
     if (!amount || amount <= 0) {
@@ -698,7 +699,7 @@ export const createCheckoutSession = async (req, res) => {
         customer_id: req.user._id.toString(),
         customer_name: `${req.user.firstName} ${req.user.lastName}`,
         customer_email: req.user.email,
-        customer_phone: req.user.phone || '9999999999',
+        customer_phone: userData.phoneNumber,
       },
       order_meta: {
         // User is redirected back here after payment
@@ -1280,6 +1281,7 @@ export default {
   initiateRefund,
   getPaymentStats,
 };
+
 
 
 
