@@ -173,7 +173,7 @@ transactionSchema.index({ userId: 1, type: 1, createdAt: -1 });
 transactionSchema.index({ userId: 1, status: 1, createdAt: -1 });
 transactionSchema.index({ serviceId: 1, createdAt: -1 });
 transactionSchema.index({ paymentId: 1 });
-transactionSchema.index({ gatewayTransactionId: 1 
+transactionSchema.index({ gatewayTransactionId: 1 });
 // Idempotency index - Prevents duplicate credits for same payment
 transactionSchema.index(
   { userId: 1, paymentId: 1, type: 1 },
@@ -265,6 +265,7 @@ transactionSchema.pre('save', function(next) {
 
 
 export const Transaction = mongoose.model('Transaction', transactionSchema);
+
 
 
 
