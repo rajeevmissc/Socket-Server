@@ -36,12 +36,129 @@ export const getWalletBalance = async (req, res) => {
 /**
  * Add money to wallet after successful payment
  */
+// export const addMoneyToWallet = async (req, res) => {
+//   const session = await mongoose.startSession();
+//   session.startTransaction();
+  
+//   try {
+//     const { amount, paymentMethod, transactionId, description } = req.body;
+    
+//     // Validate payment method matches enum
+//     const validPaymentMethods = ['UPI', 'Credit Card', 'Debit Card', 'Net Banking', 'Wallet', 'Cash', 'Stripe', 'Stripe Checkout', 'Cashfree Checkout', 'Cashfree'];
+//     if (!validPaymentMethods.includes(paymentMethod)) {
+//       await session.abortTransaction();
+//       session.endSession();
+//       return res.status(400).json({
+//         success: false,
+//         error: 'Invalid payment method',
+//         validMethods: validPaymentMethods
+//       });
+//     }
+    
+//     const reference = generateReference('credit');
+//     const balanceBefore = req.wallet.balance;
+//     const balanceAfter = balanceBefore + amount;
+    
+//     const transaction = new Transaction({
+//       userId: req.user._id,
+//       walletId: req.wallet._id,
+//       type: 'credit',
+//       amount,
+//       description: description || `Wallet Recharge via ${paymentMethod}`,
+//       reference,
+//       paymentMethod,
+//       paymentId: transactionId,
+//       category: 'recharge',
+//       balanceBefore,
+//       balanceAfter,
+//       ipAddress: req.ip,
+//       userAgent: req.get('User-Agent'),
+//       metadata: { transactionId },
+//       status: 'completed'
+//     });
+    
+//     req.wallet.balance = balanceAfter;
+//     req.wallet.updatedAt = new Date();
+    
+//     await transaction.save({ session });
+//     await req.wallet.save({ session });
+    
+//     await session.commitTransaction();
+//     session.endSession();
+        
+//     res.json({
+//       success: true,
+//       data: {
+//         transactionId: transaction._id,
+//         reference: transaction.reference,
+//         amount: transaction.amount,
+//         newBalance: balanceAfter,
+//         transaction: {
+//           id: transaction._id,
+//           type: transaction.type,
+//           amount: transaction.amount,
+//           description: transaction.description,
+//           status: transaction.status,
+//           createdAt: transaction.createdAt
+//         }
+//       }
+//     });
+    
+//   } catch (error) {
+//     await session.abortTransaction();
+//     session.endSession();
+//     console.error('Error adding money to wallet:', error);
+//     res.status(500).json({
+//       success: false,
+//       error: 'Failed to add money to wallet',
+//       details: process.env.NODE_ENV === 'development' ? error.message : undefined
+//     });
+//   }
+// };
+
+
+
 export const addMoneyToWallet = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   
   try {
     const { amount, paymentMethod, transactionId, description } = req.body;
+     // ✅ ADD THIS IDEMPOTENCY CHECK (NEW CODE - 15 LINES)
+    if (transactionId) {
+      const existingTransaction = await Transaction.findOne({
+        paymentId: transactionId,
+        userId: req.user._id,
+        type: 'credit'
+      });
+
+      if (existingTransaction) {
+        await session.abortTransaction();
+        session.endSession();
+        
+        console.log(`⚠️ Duplicate recharge blocked: ${transactionId}`);
+        
+        return res.status(200).json({
+          success: true,
+          message: 'Transaction already processed',
+          data: {
+            transactionId: existingTransaction._id,
+            reference: existingTransaction.reference,
+            amount: existingTransaction.amount,
+            newBalance: req.wallet.balance,
+            transaction: {
+              id: existingTransaction._id,
+              type: existingTransaction.type,
+              amount: existingTransaction.amount,
+              description: existingTransaction.description,
+              status: existingTransaction.status,
+              createdAt: existingTransaction.createdAt
+            }
+          }
+        });
+      }
+    }
+    // ✅ END OF NEW CODE
     
     // Validate payment method matches enum
     const validPaymentMethods = ['UPI', 'Credit Card', 'Debit Card', 'Net Banking', 'Wallet', 'Cash', 'Stripe', 'Stripe Checkout', 'Cashfree Checkout', 'Cashfree'];
@@ -107,6 +224,18 @@ export const addMoneyToWallet = async (req, res) => {
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
+    // ✅ ADD THIS ERROR HANDLING (NEW CODE - 8 LINES)
+    if (error.code === 11000) {
+      console.log(`⚠️ Duplicate transaction detected at DB level: ${req.body.transactionId}`);
+      return res.status(200).json({
+        success: true,
+        message: 'Transaction already processed',
+        data: {
+          newBalance: req.wallet.balance
+        }
+      });
+    }
+    // ✅ END OF NEW CODE
     console.error('Error adding money to wallet:', error);
     res.status(500).json({
       success: false,
@@ -521,6 +650,7 @@ export default {
   transferMoney
 
 };
+
 
 
 
