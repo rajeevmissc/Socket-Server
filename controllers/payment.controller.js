@@ -1286,7 +1286,6 @@
 
 
 
-
 // controllers/payment.controller.js
 import { Payment } from '../models/payment.model.js';
 import { generateOrderId, generateReceiptId } from '../utils/reference.util.js';
@@ -1310,10 +1309,18 @@ export const createCheckoutSession = async (req, res) => {
       amount, // paise from frontend
       currency = 'INR',
       success_url,
-      cancel_url, // not used directly by Cashfree, we use return_url
+      cancel_url,
       metadata = {}, // 🔥 NEW: Contains discount breakdown
-      userData,
+      userData = {}, // Make userData optional with default
     } = req.body;
+
+    console.log('📥 Received checkout request:', {
+      amount,
+      currency,
+      hasMetadata: !!metadata,
+      metadataKeys: Object.keys(metadata),
+      userData: userData ? 'present' : 'missing'
+    });
 
     if (!amount || amount <= 0) {
       return res.status(400).json({
@@ -1331,6 +1338,9 @@ export const createCheckoutSession = async (req, res) => {
     const orderId = generateOrderId(req.user._id);
     const receipt = generateReceiptId('wallet');
 
+    // 🔥 SAFE: Extract phone number with fallback
+    const phoneNumber = userData.phoneNumber || req.user.phone || '9999999999';
+
     const orderData = {
       order_id: orderId,
       order_amount: amountInRupees,
@@ -1339,12 +1349,10 @@ export const createCheckoutSession = async (req, res) => {
         customer_id: req.user._id.toString(),
         customer_name: `${req.user.firstName} ${req.user.lastName}`,
         customer_email: req.user.email,
-        customer_phone: userData.phoneNumber,
+        customer_phone: phoneNumber,
       },
       order_meta: {
-        // User is redirected back here after payment
         return_url: success_url || `${baseUrl}/?order_id={order_id}`,
-        // Cashfree will call this for webhook
         notify_url: `${
           process.env.BACKEND_URL || 'http://localhost:5002'
         }/api/webhooks/cashfree`,
@@ -1356,13 +1364,47 @@ export const createCheckoutSession = async (req, res) => {
         type: 'wallet_recharge',
         userEmail: req.user.email,
         userName: `${req.user.firstName} ${req.user.lastName}`,
-        ...metadata,
       },
     };
 
+    console.log('🔄 Creating Cashfree order...', { orderId, amount: amountInRupees });
+    
     const cashfreeOrder = await createCashfreeOrder(orderData);
 
-    // 🔥 NEW: Save payment with metadata for discount tracking
+    console.log('✅ Cashfree order created:', cashfreeOrder.order_id);
+
+    // 🔥 SAFE: Build notes object with optional discount data
+    const paymentNotes = {
+      userId: req.user._id.toString(),
+      type: 'wallet_recharge',
+      userEmail: req.user.email,
+      userName: `${req.user.firstName} ${req.user.lastName}`,
+    };
+
+    // 🔥 Only add discount fields if metadata has baseAmount
+    if (metadata && typeof metadata === 'object' && metadata.baseAmount) {
+      try {
+        paymentNotes.baseAmount = parseFloat(metadata.baseAmount) || 0;
+        paymentNotes.bonusAmount = parseFloat(metadata.bonusAmount) || 0;
+        paymentNotes.totalWalletCredit = parseFloat(metadata.totalWalletCredit) || paymentNotes.baseAmount;
+        paymentNotes.discountPercent = parseFloat(metadata.discountPercent) || 0;
+        paymentNotes.gstAmount = parseFloat(metadata.gstAmount) || 0;
+        paymentNotes.gstPercent = parseFloat(metadata.gstPercent) || 18;
+        
+        console.log('💰 Discount metadata added:', {
+          baseAmount: paymentNotes.baseAmount,
+          bonusAmount: paymentNotes.bonusAmount,
+          totalCredit: paymentNotes.totalWalletCredit
+        });
+      } catch (metadataError) {
+        console.error('⚠️ Error parsing metadata, continuing without discount data:', metadataError);
+        // Continue without discount data - payment still works
+      }
+    } else {
+      console.log('📝 No discount metadata provided (old flow)');
+    }
+
+    // Save payment with safe notes
     const payment = new Payment({
       userId: req.user._id,
       paymentId: cashfreeOrder.order_id,
@@ -1386,25 +1428,12 @@ export const createCheckoutSession = async (req, res) => {
       },
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
-      // 🔥 NEW: Store metadata in notes field (already exists in your model)
-      notes: {
-        userId: req.user._id.toString(),
-        type: 'wallet_recharge',
-        userEmail: req.user.email,
-        userName: `${req.user.firstName} ${req.user.lastName}`,
-        // 🔥 Add discount breakdown if present
-        ...(metadata.baseAmount && {
-          baseAmount: metadata.baseAmount,
-          bonusAmount: metadata.bonusAmount || 0,
-          totalWalletCredit: metadata.totalWalletCredit,
-          discountPercent: metadata.discountPercent || 0,
-          gstAmount: metadata.gstAmount,
-          gstPercent: metadata.gstPercent
-        })
-      },
+      notes: paymentNotes, // 🔥 Safe notes object
     });
 
     await payment.save();
+
+    console.log('💾 Payment saved to database');
 
     return res.json({
       success: true,
@@ -1418,7 +1447,8 @@ export const createCheckoutSession = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error creating Cashfree checkout session:', error);
+    console.error('❌ Error creating Cashfree checkout session:', error);
+    console.error('Error stack:', error.stack);
     return res.status(500).json({
       success: false,
       error: 'Failed to create checkout session',
@@ -1524,6 +1554,8 @@ export const verifyPaymentSession = async (req, res) => {
   try {
     const { sessionId } = req.params;
 
+    console.log('🔍 Verifying payment session:', sessionId);
+
     const payment = await Payment.findOne({
       $or: [
         { paymentId: sessionId },
@@ -1533,6 +1565,7 @@ export const verifyPaymentSession = async (req, res) => {
     });
 
     if (!payment) {
+      console.log('❌ Payment not found in database');
       return res.status(404).json({
         success: false,
         error: 'Payment record not found',
@@ -1540,7 +1573,11 @@ export const verifyPaymentSession = async (req, res) => {
       });
     }
 
+    console.log('📄 Payment found, checking Cashfree status...');
+
     const cashfreeOrder = await getCashfreeOrder(payment.orderId);
+
+    console.log('📊 Cashfree status:', cashfreeOrder.order_status);
 
     if (cashfreeOrder.order_status === 'PAID') {
       payment.status = 'captured';
@@ -1554,16 +1591,30 @@ export const verifyPaymentSession = async (req, res) => {
       };
       await payment.save();
 
-      // 🔥 NEW: Extract metadata from payment notes
-      const metadata = payment.notes && payment.notes.baseAmount ? {
-        type: payment.notes.type || 'wallet_recharge',
-        baseAmount: payment.notes.baseAmount,
-        bonusAmount: payment.notes.bonusAmount || 0,
-        totalWalletCredit: payment.notes.totalWalletCredit,
-        discountPercent: payment.notes.discountPercent || 0,
-        gstAmount: payment.notes.gstAmount,
-        gstPercent: payment.notes.gstPercent
-      } : null;
+      console.log('✅ Payment captured successfully');
+
+      // 🔥 SAFE: Extract metadata from payment notes
+      let metadata = null;
+      
+      try {
+        if (payment.notes && payment.notes.baseAmount) {
+          metadata = {
+            type: payment.notes.type || 'wallet_recharge',
+            baseAmount: payment.notes.baseAmount,
+            bonusAmount: payment.notes.bonusAmount || 0,
+            totalWalletCredit: payment.notes.totalWalletCredit || payment.notes.baseAmount,
+            discountPercent: payment.notes.discountPercent || 0,
+            gstAmount: payment.notes.gstAmount || 0,
+            gstPercent: payment.notes.gstPercent || 18
+          };
+          console.log('💰 Returning discount metadata:', metadata);
+        } else {
+          console.log('📝 No discount metadata found (old payment)');
+        }
+      } catch (metadataError) {
+        console.error('⚠️ Error extracting metadata, returning null:', metadataError);
+        metadata = null;
+      }
 
       return res.json({
         success: true,
@@ -1574,13 +1625,14 @@ export const verifyPaymentSession = async (req, res) => {
           amount: payment.amount,
           currency: payment.currency,
           capturedAt: payment.capturedAt,
-          metadata, // 🔥 NEW: Return metadata
+          metadata, // 🔥 Returns metadata or null
           message: 'Payment verified successfully',
         },
       });
     }
 
     if (cashfreeOrder.order_status === 'ACTIVE') {
+      console.log('⏳ Payment still pending');
       return res.status(400).json({
         success: false,
         error: 'Payment pending',
@@ -1590,6 +1642,7 @@ export const verifyPaymentSession = async (req, res) => {
     }
 
     // Any other status -> failed
+    console.log('❌ Payment failed with status:', cashfreeOrder.order_status);
     payment.status = 'failed';
     payment.failureReason = `Payment status: ${cashfreeOrder.order_status}`;
     await payment.save();
@@ -1601,7 +1654,8 @@ export const verifyPaymentSession = async (req, res) => {
       status: cashfreeOrder.order_status,
     });
   } catch (error) {
-    console.error('Error verifying Cashfree payment:', error);
+    console.error('❌ Error verifying Cashfree payment:', error);
+    console.error('Error stack:', error.stack);
     return res.status(500).json({
       success: false,
       error: 'Failed to verify payment',
@@ -1660,9 +1714,6 @@ export const verifyPayment = async (req, res) => {
     });
   }
 };
-
-// 🔽 The rest of your functions are unchanged logic-wise,
-// just re-used with Cashfree payments stored in the same Payment model.
 
 /**
  * Get payment details by payment ID
@@ -1782,7 +1833,7 @@ export const retryPayment = async (req, res) => {
 
     const orderData = {
       order_id: newOrderId,
-      order_amount: payment.amount, // already rupees
+      order_amount: payment.amount,
       order_currency: payment.currency,
       customer_details: {
         customer_id: req.user._id.toString(),
@@ -1877,7 +1928,6 @@ export const cancelPayment = async (req, res) => {
       });
     }
 
-    // Cashfree usually does not require explicit cancel; we just mark ours
     payment.status = 'cancelled';
     payment.cancelledAt = new Date();
     await payment.save();
@@ -1945,7 +1995,6 @@ export default {
   initiateRefund,
   getPaymentStats,
 };
-
 
 
 
